@@ -31,7 +31,7 @@ export function buildReminderItems(
 
   return snapshot.workPackages
     .filter((wp) => wp.type !== "risk")
-    .filter((wp) => wp.status !== "done" && wp.status !== "completed" && wp.status !== "closed")
+    .filter((wp) => wp.status !== "done")
     .map<ReminderItem>((wp) => {
       const owner = wp.assigneeId ? peopleLookup.get(wp.assigneeId) : undefined;
       const daysIdle = wp.lastUpdatedAt ? daysBetween(now, wp.lastUpdatedAt) : 0;

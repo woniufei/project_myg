@@ -51,7 +51,10 @@ export async function resolveAgentAuthFromRequest(request: Request): Promise<Age
     }
 
     return {
-      user: mapUser(user as StoredUser),
+      user: mapUser({
+        ...user,
+        roles: JSON.stringify([user.role])
+      } as unknown as StoredUser),
       apiKeyId: key.id,
       allowedTools: parseStringArray(key.allowedTools),
       source: "rest:api-key"
@@ -67,7 +70,13 @@ export async function resolveAgentAuthFromRequest(request: Request): Promise<Age
     throw new Error("未找到当前用户，请提供有效的 x-user-id。");
   }
 
-  return { user: mapUser(user as StoredUser), source: "rest:user" };
+  return {
+    user: mapUser({
+      ...user,
+      roles: JSON.stringify([user.role])
+    } as unknown as StoredUser),
+    source: "rest:user"
+  };
 }
 
 function parseStringArray(value: string): string[] {

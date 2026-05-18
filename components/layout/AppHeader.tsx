@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { Button } from "@/components/primer/Button";
 import { ProjectSwitcher } from "./ProjectSwitcher";
 import { UserMenu } from "./UserMenu";
+import { canUser } from "@/lib/rbac";
 import type { Project, User } from "@/lib/types";
 
 interface AppHeaderProps {
@@ -15,6 +15,8 @@ interface AppHeaderProps {
  * switcher on the left, command/notification/profile cluster on the right.
  */
 export function AppHeader({ projects, currentProjectIdentifier, currentUser }: AppHeaderProps) {
+  const createHref = resolveCreateHref(currentProjectIdentifier, currentUser);
+
   return (
     <header className="app-header">
       <Link href="/" className="app-header__brand" aria-label="返回工作台首页">
@@ -27,6 +29,7 @@ export function AppHeader({ projects, currentProjectIdentifier, currentUser }: A
       <ProjectSwitcher
         projects={projects}
         currentProjectIdentifier={currentProjectIdentifier}
+        currentUser={currentUser}
       />
 
       <div className="app-header__spacer" />
@@ -38,15 +41,19 @@ export function AppHeader({ projects, currentProjectIdentifier, currentUser }: A
       </button>
 
       <div className="app-header__actions">
-        <Button
-          variant="ghost"
-          size="sm"
-          data-icon-only="true"
-          aria-label="新建"
-          title="新建工作项 / 项目"
-        >
-          <PlusIcon />
-        </Button>
+        {createHref ? (
+          <Link
+            href={createHref}
+            className="btn"
+            data-variant="ghost"
+            data-size="sm"
+            data-icon-only="true"
+            aria-label="新建工作项"
+            title="新建工作项"
+          >
+            <PlusIcon />
+          </Link>
+        ) : null}
         <Link
           href="/notifications"
           className="btn"
@@ -63,6 +70,22 @@ export function AppHeader({ projects, currentProjectIdentifier, currentUser }: A
       </div>
     </header>
   );
+}
+
+function resolveCreateHref(currentProjectIdentifier?: string, currentUser?: User) {
+  if (!currentUser) {
+    return undefined;
+  }
+
+  if (currentProjectIdentifier && canUser(currentUser, "assignWorkPackages")) {
+    return `/projects/${currentProjectIdentifier}/work-packages/new`;
+  }
+
+  if (canUser(currentUser, "createPersonalWorkPackage")) {
+    return "/my/work-packages/new";
+  }
+
+  return undefined;
 }
 
 function SearchIcon() {

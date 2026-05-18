@@ -12,6 +12,7 @@ interface UserMenuProps {
 const DEMO_ACCOUNTS: Array<{ id: string; name: string; role: User["role"] }> = [
   { id: "u-admin", name: "平台管理员", role: "admin" },
   { id: "u-pm", name: "项目经理", role: "projectManager" },
+  { id: "u-teamlead", name: "团队负责人", role: "teamLead" },
   { id: "u-member", name: "项目参与员", role: "participant" }
 ];
 
@@ -38,6 +39,7 @@ export function UserMenu({ currentUser }: UserMenuProps) {
 
   async function selectUser(userId: string) {
     setOpen(false);
+    const account = DEMO_ACCOUNTS.find((item) => item.id === userId);
     try {
       await fetch("/api/session", {
         method: "POST",
@@ -47,6 +49,7 @@ export function UserMenu({ currentUser }: UserMenuProps) {
     } catch {
       // ignore network errors; the next refresh will keep the prior cookie
     }
+    router.push(account?.role === "admin" ? "/admin" : "/my/page");
     router.refresh();
   }
 

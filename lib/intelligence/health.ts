@@ -91,7 +91,7 @@ function buildHighlight(
 }
 
 function isOverdue(dueDate: string | undefined, status: string): boolean {
-  if (!dueDate || status === "done" || status === "completed" || status === "closed") {
+  if (!dueDate || status === "done") {
     return false;
   }
 

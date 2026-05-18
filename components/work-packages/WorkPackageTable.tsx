@@ -1,8 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { Badge } from "@/components/primer/Badge";
 import { EmptyState } from "@/components/primer/EmptyState";
+import {
+  ColumnConfigurator,
+  useColumnPreferences,
+  type ListColumn
+} from "./ColumnConfigurator";
 import {
   getStatusTone,
   priorityLabel,
@@ -12,6 +18,11 @@ import {
   typeTone
 } from "@/lib/work-package-presentation";
 import type { Person, Project, WorkPackage } from "@/lib/types";
+
+interface WorkPackageColumn extends ListColumn {
+  width?: number;
+  render: (workPackage: WorkPackage) => ReactNode;
+}
 
 interface WorkPackageTableProps {
   workPackages: WorkPackage[];
@@ -39,6 +50,112 @@ export function WorkPackageTable({
   onSelect,
   hrefBuilder
 }: WorkPackageTableProps) {
+  const projectLookup = new Map(projects.map((project) => [project.id, project]));
+  const personLookup = new Map(people.map((person) => [person.id, person]));
+  const showProjectColumn = Boolean(hrefBuilder);
+  const baseColumns: WorkPackageColumn[] = [
+    {
+      id: "type",
+      label: "类型",
+      width: 80,
+      render: (wp) => <Badge tone={typeTone(wp.type)}>{typeLabel(wp.type)}</Badge>
+    },
+    { id: "id", label: "ID", width: 50, render: (wp) => <span className="hint mono">#{wp.id}</span> },
+    {
+      id: "subject",
+      label: "主题",
+      render: (wp) => {
+        const project = wp.projectId ? projectLookup.get(wp.projectId) : undefined;
+        const href = hrefBuilder ? hrefBuilder(wp, project) : undefined;
+        return href ? (
+          <Link href={href} style={{ color: "var(--fg-default)", fontWeight: 500 }}>
+            {wp.subject}
+          </Link>
+        ) : (
+          <span style={{ fontWeight: 500 }}>{wp.subject}</span>
+        );
+      }
+    },
+    {
+      id: "status",
+      label: "状态",
+      width: 100,
+      render: (wp) => <Badge tone={getStatusTone(wp.status)}>{statusLabel(wp.status)}</Badge>
+    },
+    {
+      id: "priority",
+      label: "优先级",
+      width: 80,
+      render: (wp) => <Badge tone={priorityTone(wp.priority)}>{priorityLabel(wp.priority)}</Badge>
+    },
+    {
+      id: "assignee",
+      label: "负责人",
+      width: 120,
+      render: (wp) => {
+        const assignments = wp.assignments ?? [];
+        if (assignments.length > 0) {
+          const names = assignments
+            .slice(0, 2)
+            .map((assignment) => personLookup.get(assignment.personId)?.name ?? assignment.personId)
+            .join("、");
+          return (
+            <span
+              className="hint"
+              title={assignments
+                .map((assignment) => {
+                  const name = personLookup.get(assignment.personId)?.name ?? assignment.personId;
+                  return `${name}（${assignment.role}）：${assignment.responsibility || "未填写分工"}`;
+                })
+                .join("\n")}
+            >
+              {names}{assignments.length > 2 ? ` 等 ${assignments.length} 人` : ""}
+            </span>
+          );
+        }
+        const assignee = wp.assigneeId ? personLookup.get(wp.assigneeId) : undefined;
+        return <span className="hint">{assignee ? assignee.name : "—"}</span>;
+      }
+    },
+    {
+      id: "project",
+      label: "项目",
+      width: 160,
+      render: (wp) => {
+        const project = wp.projectId ? projectLookup.get(wp.projectId) : undefined;
+        return (
+          <span className="hint">
+            {project ? <Link href={`/projects/${project.identifier}/overview`}>{project.name}</Link> : "—"}
+          </span>
+        );
+      }
+    },
+    {
+      id: "progress",
+      label: "进度",
+      width: 90,
+      render: (wp) => <span className="hint mono">{wp.percentComplete}%</span>
+    },
+    {
+      id: "dueDate",
+      label: "截止",
+      width: 100,
+      render: (wp) => (
+        <span className="hint mono">
+          {wp.dueDate ? new Date(wp.dueDate).toISOString().slice(0, 10) : "—"}
+        </span>
+      )
+    }
+  ];
+  const columns = baseColumns.filter((column) => showProjectColumn || column.id !== "project");
+  const {
+    orderedColumns,
+    visibleColumns,
+    visibleIds,
+    toggleColumn,
+    moveColumn
+  } = useColumnPreferences(showProjectColumn ? "work-package-table-global" : "work-package-table-project", columns);
+
   if (workPackages.length === 0) {
     return (
       <EmptyState
@@ -48,44 +165,35 @@ export function WorkPackageTable({
     );
   }
 
-  const projectLookup = new Map(projects.map((project) => [project.id, project]));
-  const personLookup = new Map(people.map((person) => [person.id, person]));
-  const showProjectColumn = Boolean(hrefBuilder);
-
   return (
     <div className="surface" data-flush="true">
+      <div style={{ display: "flex", justifyContent: "flex-end", padding: "8px 12px" }}>
+        <ColumnConfigurator
+          columns={orderedColumns}
+          visibleIds={visibleIds}
+          onToggle={toggleColumn}
+          onMove={moveColumn}
+        />
+      </div>
       <div className="scroll-x">
-        <table className="data-table" style={{ minWidth: showProjectColumn ? 920 : 720 }}>
+        <table className="data-table" style={{ minWidth: Math.max(520, visibleColumns.length * 110) }}>
           <colgroup>
-            <col style={{ width: 80 }} />
-            <col style={{ width: 50 }} />
-            <col />
-            <col style={{ width: 100 }} />
-            <col style={{ width: 70 }} />
-            <col style={{ width: 120 }} />
-            {showProjectColumn ? <col style={{ width: 160 }} /> : null}
-            <col style={{ width: 100 }} />
+            {visibleColumns.map((column) => (
+              <col key={column.id} style={column.width ? { width: column.width } : undefined} />
+            ))}
           </colgroup>
           <thead>
             <tr>
-              <th>类型</th>
-              <th>ID</th>
-              <th>主题</th>
-              <th>状态</th>
-              <th>优先级</th>
-              <th>负责人</th>
-              {showProjectColumn ? <th>项目</th> : null}
-              <th>截止</th>
+              {visibleColumns.map((column) => (
+                <th key={column.id}>{column.label}</th>
+              ))}
             </tr>
           </thead>
           <tbody>
             {workPackages.map((wp) => {
-              const project = wp.projectId ? projectLookup.get(wp.projectId) : undefined;
-              const assignee = wp.assigneeId ? personLookup.get(wp.assigneeId) : undefined;
               const isSelected = selectedId === wp.id;
-              const href = hrefBuilder ? hrefBuilder(wp, project) : undefined;
               const handleClick = onSelect ? () => onSelect(wp) : undefined;
-              const isClickable = Boolean(handleClick || href);
+              const isClickable = Boolean(handleClick || hrefBuilder);
               return (
                 <tr
                   key={wp.id}
@@ -93,45 +201,9 @@ export function WorkPackageTable({
                   data-selected={isSelected ? "true" : undefined}
                   onClick={handleClick}
                 >
-                  <td>
-                    <Badge tone={typeTone(wp.type)}>{typeLabel(wp.type)}</Badge>
-                  </td>
-                  <td className="hint mono">#{wp.id}</td>
-                  <td>
-                    {href ? (
-                      <Link
-                        href={href}
-                        style={{ color: "var(--fg-default)", fontWeight: 500 }}
-                      >
-                        {wp.subject}
-                      </Link>
-                    ) : (
-                      <span style={{ fontWeight: 500 }}>{wp.subject}</span>
-                    )}
-                  </td>
-                  <td>
-                    <Badge tone={getStatusTone(wp.status)}>{statusLabel(wp.status)}</Badge>
-                  </td>
-                  <td>
-                    <Badge tone={priorityTone(wp.priority)}>{priorityLabel(wp.priority)}</Badge>
-                  </td>
-                  <td className="hint">
-                    {assignee ? assignee.name : "—"}
-                  </td>
-                  {showProjectColumn ? (
-                    <td className="hint">
-                      {project ? (
-                        <Link href={`/projects/${project.identifier}/overview`}>
-                          {project.name}
-                        </Link>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                  ) : null}
-                  <td className="hint mono">
-                    {wp.dueDate ? new Date(wp.dueDate).toISOString().slice(0, 10) : "—"}
-                  </td>
+                  {visibleColumns.map((column) => (
+                    <td key={column.id}>{column.render(wp)}</td>
+                  ))}
                 </tr>
               );
             })}

@@ -45,8 +45,7 @@ export default async function ProjectOverviewPage({ params }: PageProps) {
   const risks = projectWorkPackages.filter((wp) => wp.type === "risk");
   const subProjects = snapshot.projects.filter((item) => item.parentId === project.id);
   const personLookup = new Map(snapshot.people.map((person) => [person.id, person]));
-  const closedStatuses = new Set(["done", "completed", "closed", "achieved"]);
-  const activeCount = projectWorkPackages.filter((wp) => !closedStatuses.has(wp.status)).length;
+  const activeCount = projectWorkPackages.filter((wp) => wp.status !== "done").length;
 
   return (
     <>

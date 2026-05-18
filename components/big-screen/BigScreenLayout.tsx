@@ -20,6 +20,7 @@ import type {
   PlanModel,
   PlanNode,
   PlanPhase,
+  PlanTask,
   PlanRiskLevel,
   ScreenPlanResponse
 } from "@/lib/services/big-screen-plan";

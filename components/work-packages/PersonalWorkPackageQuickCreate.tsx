@@ -5,6 +5,13 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/primer/Button";
 import { Input } from "@/components/primer/Input";
 import { Select } from "@/components/primer/Select";
+import {
+  AttachmentPicker,
+  RequirementListEditor,
+  normalizeRequirementItems,
+  type AttachmentDraft
+} from "@/components/work-packages/WorkPackageFormFields";
+import { userHasRole } from "@/lib/rbac";
 import type { Priority, Project, User, WorkPackageType } from "@/lib/types";
 
 interface PersonalWorkPackageQuickCreateProps {
@@ -34,11 +41,22 @@ export function PersonalWorkPackageQuickCreate({
   const [type, setType] = useState<WorkPackageType>("task");
   const [priority, setPriority] = useState<Priority>("P1");
   const [dueDate, setDueDate] = useState("");
+  const [requirements, setRequirements] = useState([""]);
+  const [attachments, setAttachments] = useState<AttachmentDraft[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const isRequirementRequired =
+    userHasRole(currentUser, "admin") ||
+    userHasRole(currentUser, "projectManager") ||
+    userHasRole(currentUser, "teamLead");
 
   async function submit() {
     if (!currentUser || !subject.trim()) {
+      return;
+    }
+    const normalizedRequirements = normalizeRequirementItems(requirements);
+    if (isRequirementRequired && normalizedRequirements.length === 0) {
+      setError("当前角色创建工作项时至少需要填写 1 条需求项。");
       return;
     }
 
@@ -56,6 +74,8 @@ export function PersonalWorkPackageQuickCreate({
           type,
           subject: subject.trim(),
           priority,
+          requirements: normalizedRequirements,
+          attachments,
           dueDate: dueDate || undefined
         })
       });
@@ -69,6 +89,8 @@ export function PersonalWorkPackageQuickCreate({
       setType("task");
       setPriority("P1");
       setDueDate("");
+      setRequirements([""]);
+      setAttachments([]);
       setOpen(false);
       router.refresh();
     } catch (caught) {
@@ -94,7 +116,7 @@ export function PersonalWorkPackageQuickCreate({
             position: "absolute",
             right: 0,
             top: "calc(100% + 8px)",
-            width: 360,
+            width: 420,
             zIndex: 20,
             boxShadow: "var(--shadow-floating)"
           }}
@@ -152,12 +174,28 @@ export function PersonalWorkPackageQuickCreate({
               <span className="label">截止日期</span>
               <Input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} />
             </label>
+            <RequirementListEditor
+              value={requirements}
+              onChange={setRequirements}
+              required={isRequirementRequired}
+              compact
+            />
+            <AttachmentPicker value={attachments} onChange={setAttachments} disabled={busy} />
             {error ? <p style={{ color: "var(--danger-fg)", margin: 0, fontSize: 12 }}>{error}</p> : null}
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
               <Button size="sm" variant="ghost" disabled={busy} onClick={() => setOpen(false)}>
                 取消
               </Button>
-              <Button size="sm" variant="primary" disabled={busy || !subject.trim()} onClick={submit}>
+              <Button
+                size="sm"
+                variant="primary"
+                disabled={
+                  busy ||
+                  !subject.trim() ||
+                  (isRequirementRequired && normalizeRequirementItems(requirements).length === 0)
+                }
+                onClick={submit}
+              >
                 {busy ? "创建中…" : "创建"}
               </Button>
             </div>

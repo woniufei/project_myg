@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { getUserRoles } from "@/lib/rbac";
 import type { PlatformRole, User } from "@/lib/types";
 import { assertPermission, ServiceError } from "./auth-context";
 
@@ -146,7 +147,7 @@ export async function isModuleEnabledForUser(
     return true;
   }
 
-  return flag.roleOverrides[user.role] ?? true;
+  return getUserRoles(user).some((role) => flag.roleOverrides[role] ?? true);
 }
 
 export function isFlagEnabledForUser(
@@ -159,7 +160,7 @@ export function isFlagEnabledForUser(
     return false;
   }
 
-  return user ? flag.roleOverrides[user.role] ?? true : true;
+  return user ? getUserRoles(user).some((role) => flag.roleOverrides[role] ?? true) : true;
 }
 
 async function ensureDefaultPlatformFeatureFlags() {
@@ -191,7 +192,7 @@ function normalizeRoleOverrides(
   value: Partial<Record<PlatformRole, boolean>>
 ): Partial<Record<PlatformRole, boolean>> {
   const normalized: Partial<Record<PlatformRole, boolean>> = {};
-  for (const role of ["admin", "projectManager", "participant"] satisfies PlatformRole[]) {
+  for (const role of ["admin", "projectManager", "teamLead", "participant"] satisfies PlatformRole[]) {
     if (typeof value[role] === "boolean") {
       normalized[role] = value[role];
     }

@@ -1,10 +1,14 @@
 import { notFound } from "next/navigation";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
+import { PermissionOverridesPanel } from "@/components/admin/PermissionOverridesPanel";
 import { Badge } from "@/components/primer/Badge";
 import { EmptyState } from "@/components/primer/EmptyState";
 import { Surface } from "@/components/primer/Surface";
+import { ProjectMemberAddPanel } from "@/components/projects/ProjectMemberAddPanel";
 import { roleLabels } from "@/lib/rbac";
+import { listProjectMemberCandidates } from "@/lib/services/project-workflow";
 import { getShellRequestContext } from "@/lib/services/shell-request-context";
+import type { User } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +18,7 @@ interface PageProps {
 
 export default async function ProjectMembersPage({ params }: PageProps) {
   const { identifier } = await params;
-  const { snapshot } = await getShellRequestContext();
+  const { snapshot, currentUser } = await getShellRequestContext();
   const project = snapshot.projects.find((item) => item.identifier === identifier);
   if (!project) {
     notFound();
@@ -25,7 +29,11 @@ export default async function ProjectMembersPage({ params }: PageProps) {
       user.managedProjectIds.includes(project.id) ||
       user.participatingProjectIds.includes(project.id)
   );
+  const visibleMembers = filterManageableMembers(members, currentUser, new Set(snapshot.people.map((person) => person.id)));
   const personLookup = new Map(snapshot.people.map((person) => [person.id, person]));
+  const memberCandidates = currentUser
+    ? await listProjectMemberCandidates(project.id, currentUser)
+    : [];
 
   return (
     <>
@@ -43,11 +51,20 @@ export default async function ProjectMembersPage({ params }: PageProps) {
         </div>
       </header>
       <Surface
-        title={`成员 (${members.length})`}
-        description="按系统角色与项目角色分组展示。"
+        title={`成员 (${visibleMembers.length})`}
+        description="仅展示当前账号可查看和可操作的下级成员。"
         flush
       >
-        {members.length === 0 ? (
+        {currentUser && currentUser.role !== "participant" ? (
+          <div style={{ padding: 16, borderBottom: "1px solid var(--border-default)" }}>
+            <ProjectMemberAddPanel
+              projectIdentifier={project.identifier}
+              currentUser={currentUser}
+              candidates={memberCandidates}
+            />
+          </div>
+        ) : null}
+        {visibleMembers.length === 0 ? (
           <div style={{ padding: 16 }}>
             <EmptyState title="暂无成员" />
           </div>
@@ -73,7 +90,7 @@ export default async function ProjectMembersPage({ params }: PageProps) {
                 </tr>
               </thead>
               <tbody>
-                {members.map((user) => {
+                {visibleMembers.map((user) => {
                   const person = personLookup.get(user.personId);
                   const isLead = user.managedProjectIds.includes(project.id);
                   return (
@@ -130,6 +147,56 @@ export default async function ProjectMembersPage({ params }: PageProps) {
           </div>
         )}
       </Surface>
+      {currentUser?.role === "admin" ? (
+        <PermissionOverridesPanel
+          currentUser={currentUser}
+          users={visibleMembers}
+          projects={snapshot.projects}
+          fixedScope={{
+            type: "project",
+            id: project.id,
+            label: `${project.name} 项目`
+          }}
+        />
+      ) : null}
     </>
   );
+}
+
+function filterManageableMembers(
+  members: User[],
+  currentUser: User | undefined,
+  visiblePersonIds: Set<string>
+): User[] {
+  if (!currentUser) {
+    return [];
+  }
+
+  const currentRank = highestRoleRank(currentUser);
+  return members.filter((member) => {
+    if (member.id === currentUser.id) {
+      return false;
+    }
+    if (highestRoleRank(member) >= currentRank) {
+      return false;
+    }
+    if (currentUser.role === "teamLead") {
+      return visiblePersonIds.has(member.personId);
+    }
+    return true;
+  });
+}
+
+function highestRoleRank(user: User) {
+  switch (user.role) {
+    case "admin":
+      return 4;
+    case "projectManager":
+      return 3;
+    case "teamLead":
+      return 2;
+    case "participant":
+    default:
+      return 1;
+  }
 }

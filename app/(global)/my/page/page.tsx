@@ -25,6 +25,9 @@ export default async function MyPage() {
   const canUsePersonalAgentBreakdown = isFlagEnabledForUser(flags, "personalAgentBreakdown", currentUser);
   const canViewPersonalNotifications = isFlagEnabledForUser(flags, "personalNotifications", currentUser);
 
+  const myProjectIds = currentUser
+    ? new Set([...currentUser.managedProjectIds, ...currentUser.participatingProjectIds])
+    : new Set<string>();
   const myWorkPackages = currentUser
     ? Array.from(
         new Map(
@@ -32,7 +35,9 @@ export default async function MyPage() {
             .filter(
               (wp) =>
                 wp.assigneeId === currentUser.personId ||
-                wp.createdByUserId === currentUser.id
+                wp.assignments?.some((assignment) => assignment.personId === currentUser.personId) ||
+                wp.createdByUserId === currentUser.id ||
+                (currentUser.role === "teamLead" && wp.type === "phase" && Boolean(wp.projectId && myProjectIds.has(wp.projectId)))
             )
             .map((wp) => [wp.id, wp])
         ).values()
@@ -40,11 +45,7 @@ export default async function MyPage() {
     : [];
   const personalWorkPackageCount = myWorkPackages.filter((wp) => !wp.projectId).length;
   const myProjects = currentUser
-    ? snapshot.projects.filter(
-        (project) =>
-          currentUser.managedProjectIds.includes(project.id) ||
-          currentUser.participatingProjectIds.includes(project.id)
-      )
+    ? snapshot.projects.filter((project) => myProjectIds.has(project.id))
     : snapshot.projects;
   const stats = calculateDashboardStats({ ...snapshot, workPackages: myWorkPackages });
 
@@ -120,7 +121,11 @@ export default async function MyPage() {
           <MyWorkbenchTable
             currentUser={currentUser}
             workPackages={myWorkPackages}
+            allWorkPackages={snapshot.workPackages}
             projects={myProjects}
+            people={snapshot.people}
+            comments={snapshot.workPackageComments}
+            approvals={snapshot.workPackageApprovals}
           />
         )}
       </Surface>

@@ -4,6 +4,7 @@ import {
   createWorkPackage,
   type WorkPackageCreateInput
 } from "@/lib/services/work-package-workflow";
+import { recordProjectStateSnapshot } from "@/lib/services/big-screen-plan";
 import { loadWorkspaceSnapshot } from "@/lib/services/workspace";
 import type { Priority, WorkPackageStatus, WorkPackageType } from "@/lib/types";
 
@@ -68,10 +69,21 @@ export async function POST(request: Request) {
         riskImpact: body.riskImpact,
         riskMitigation: body.riskMitigation,
         dependencies: body.dependencies,
-        lastProgressNote: body.lastProgressNote
+        lastProgressNote: body.lastProgressNote,
+        requirements: body.requirements,
+        memberAssignments: body.memberAssignments,
+        attachments: body.attachments
       },
       user
     );
+
+    if (workPackage.projectId) {
+      await recordProjectStateSnapshot({
+        projectId: workPackage.projectId,
+        user,
+        triggerType: "TASK_PROGRESS_UPDATED"
+      });
+    }
 
     return NextResponse.json({ workPackage }, { status: 201 });
   } catch (error) {

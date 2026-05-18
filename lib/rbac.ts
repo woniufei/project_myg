@@ -1,153 +1,13 @@
-import type { PlatformRole, RolePermission, User, WorkspaceSnapshot } from "./types";
+import type { PlatformRole, Project, User, WorkspaceSnapshot } from "./types";
+import { permissionMatrix } from "./permissions";
+export { permissionMatrix } from "./permissions";
 
 export const roleLabels: Record<PlatformRole, string> = {
   admin: "管理员",
   projectManager: "项目经理",
+  teamLead: "团队负责人",
   participant: "项目参与员"
 };
-
-export const permissionMatrix: RolePermission[] = [
-  {
-    key: "overview",
-    label: "查看项目工作台",
-    admin: true,
-    projectManager: true,
-    participant: true
-  },
-  {
-    key: "manageProjects",
-    label: "创建与管理项目",
-    admin: true,
-    projectManager: true,
-    participant: false
-  },
-  {
-    key: "manageProjectModules",
-    label: "启用/禁用项目模块",
-    admin: true,
-    projectManager: true,
-    participant: false
-  },
-  {
-    key: "assignWorkPackages",
-    label: "分配工作项与调整负责人",
-    admin: true,
-    projectManager: true,
-    participant: false
-  },
-  {
-    key: "updateOwnWorkPackages",
-    label: "更新本人工作项进展",
-    admin: true,
-    projectManager: true,
-    participant: true
-  },
-  {
-    key: "approveWorkPackages",
-    label: "对工作项执行签核",
-    admin: true,
-    projectManager: true,
-    participant: false
-  },
-  {
-    key: "manageNotifications",
-    label: "管理通知通道与路由规则",
-    admin: true,
-    projectManager: true,
-    participant: false
-  },
-  {
-    key: "viewNotifications",
-    label: "查看个人范围内的智能通知",
-    admin: true,
-    projectManager: true,
-    participant: true
-  },
-  {
-    key: "viewIntelligence",
-    label: "查看智能调度建议、健康度与催办",
-    admin: true,
-    projectManager: true,
-    participant: true
-  },
-  {
-    key: "useAgentBreakdown",
-    label: "使用 AI 拆解工作项草稿",
-    admin: true,
-    projectManager: true,
-    participant: false
-  },
-  {
-    key: "createPersonalWorkPackage",
-    label: "创建个人工作项",
-    admin: true,
-    projectManager: true,
-    participant: true
-  },
-  {
-    key: "deleteOwnWorkPackage",
-    label: "删除本人创建的工作项",
-    admin: true,
-    projectManager: true,
-    participant: true
-  },
-  {
-    key: "usePersonalAgentBreakdown",
-    label: "使用个人 AI 拆解",
-    admin: true,
-    projectManager: true,
-    participant: true
-  },
-  {
-    key: "deleteAnyWorkPackage",
-    label: "删除任意工作项",
-    admin: true,
-    projectManager: false,
-    participant: false
-  },
-  {
-    key: "viewPlatformOverview",
-    label: "查看平台总览",
-    admin: true,
-    projectManager: true,
-    participant: true
-  },
-  {
-    key: "managePlatformFeatureFlags",
-    label: "管理平台模块开关",
-    admin: true,
-    projectManager: false,
-    participant: false
-  },
-  {
-    key: "viewBigScreen",
-    label: "查看平台大屏",
-    admin: true,
-    projectManager: true,
-    participant: true
-  },
-  {
-    key: "useAgentTool",
-    label: "使用 AI 工具",
-    admin: true,
-    projectManager: true,
-    participant: true
-  },
-  {
-    key: "manageAgentApiKeys",
-    label: "管理 Agent API Key",
-    admin: true,
-    projectManager: false,
-    participant: false
-  },
-  {
-    key: "viewAgentAudit",
-    label: "查看 Agent 调用审计",
-    admin: true,
-    projectManager: true,
-    participant: false
-  }
-];
 
 /**
  * Checks whether the role can use the given permission.
@@ -158,10 +18,69 @@ export function can(role: PlatformRole, permissionKey: string): boolean {
 }
 
 /**
+ * Checks whether any of the user's roles can use the given permission.
+ */
+export function canAny(roles: PlatformRole[], permissionKey: string): boolean {
+  return roles.some((role) => can(role, permissionKey));
+}
+
+/**
+ * Returns the user's single platform role as an array for legacy call sites.
+ */
+export function getUserRoles(user?: Pick<User, "role" | "roles">): PlatformRole[] {
+  if (!user) {
+    return [];
+  }
+  return [user.role];
+}
+
+/**
+ * Checks whether any of a user's roles can use the given permission.
+ */
+export function canUser(user: Pick<User, "role" | "roles"> | undefined, permissionKey: string): boolean {
+  return canAny(getUserRoles(user), permissionKey);
+}
+
+/**
+ * Checks whether the user has the given role.
+ */
+export function userHasRole(user: Pick<User, "role" | "roles"> | undefined, role: PlatformRole): boolean {
+  return getUserRoles(user).includes(role);
+}
+
+/**
+ * Checks whether the user's roles include the given role.
+ */
+export function hasExactRole(roles: PlatformRole[], role: PlatformRole): boolean {
+  return roles.includes(role);
+}
+
+/**
+ * Returns the person IDs of all team members for the given team lead.
+ * Currently returns the lead's own personId as a safe fallback until
+ * Team/TeamMembership tables are populated (see docs/权限与菜单设计方案.md).
+ */
+export function getTeamMemberPersonIds(leadPersonId: string): string[] {
+  // TODO: replace with actual TeamMembership lookup once Team model is populated
+  return [leadPersonId];
+}
+
+/**
  * Filters workspace data according to the current user's project scope.
+ *
+ * - Admin: sees everything.
+ * - PM: sees managed + participating projects and all work packages in scope.
+ * - TeamLead: sees participating projects + work packages of team members.
+ * - Participant: sees participating projects + only own work packages.
  */
 export function filterWorkspaceForUser(snapshot: WorkspaceSnapshot, user: User): WorkspaceSnapshot {
-  if (user.role === "admin") {
+  const userRoles = getUserRoles(user);
+  const isAdmin = user.role === "admin";
+  const isPM = user.role === "projectManager";
+  const isTeamLead = user.role === "teamLead";
+  const isParticipant = user.role === "participant";
+
+  if (isAdmin) {
     return snapshot;
   }
 
@@ -170,15 +89,34 @@ export function filterWorkspaceForUser(snapshot: WorkspaceSnapshot, user: User):
     (wp) =>
       (wp.projectId ? visibleProjectIds.has(wp.projectId) : wp.createdByUserId === user.id)
   );
-  const scopedWorkPackages =
-    user.role === "participant"
-      ? visibleWorkPackages.filter(
-          (wp) => wp.assigneeId === user.personId || wp.createdByUserId === user.id
-        )
-      : visibleWorkPackages;
+
+  let scopedWorkPackages: typeof visibleWorkPackages;
+  if (isParticipant) {
+    // Participant: only own work packages.
+    scopedWorkPackages = visibleWorkPackages.filter(
+      (wp) => isWorkPackageAssignedTo(wp, [user.personId]) || wp.createdByUserId === user.id
+    );
+  } else if (isTeamLead) {
+    const teamMemberPersonIds = getTeamMemberPersonIds(user.personId);
+    scopedWorkPackages = visibleWorkPackages.filter(
+      (wp) =>
+        isWorkPackageAssignedTo(wp, teamMemberPersonIds) ||
+        teamMemberPersonIds.includes(wp.createdByUserId)
+    );
+  } else if (isPM) {
+    // Project manager: see all in-scope work packages.
+    scopedWorkPackages = visibleWorkPackages;
+  } else {
+    // fallback: participant-level scoping
+    scopedWorkPackages = visibleWorkPackages.filter(
+      (wp) => isWorkPackageAssignedTo(wp, [user.personId]) || wp.createdByUserId === user.id
+    );
+  }
+
   const visibleWorkPackageIds = new Set(scopedWorkPackages.map((wp) => wp.id));
   const visiblePeopleIds = new Set([
-    ...visibleWorkPackages.map((wp) => wp.assigneeId).filter((id): id is string => Boolean(id)),
+    ...scopedWorkPackages.map((wp) => wp.assigneeId).filter((id): id is string => Boolean(id)),
+    ...scopedWorkPackages.flatMap((wp) => wp.assignments?.map((assignment) => assignment.personId) ?? []),
     user.personId
   ]);
 
@@ -201,12 +139,43 @@ export function filterWorkspaceForUser(snapshot: WorkspaceSnapshot, user: User):
     stewardMessages: snapshot.stewardMessages,
     notificationChannels: snapshot.notificationChannels.filter(
       (channel) =>
-        channel.audienceRoles.includes(user.role) ||
+        channel.audienceRoles.some((role) => userRoles.includes(role)) ||
         channel.audiencePersonIds.includes(user.personId)
     ),
     notificationRules:
-      user.role === "participant"
-        ? snapshot.notificationRules.filter((rule) => rule.audienceRoles.includes(user.role))
+      !isPM && !isAdmin
+        ? snapshot.notificationRules.filter((rule) =>
+            rule.audienceRoles.some((role) => userRoles.includes(role))
+          )
         : snapshot.notificationRules
   };
 }
+
+function isWorkPackageAssignedTo(
+  workPackage: WorkspaceSnapshot["workPackages"][number],
+  personIds: string[]
+): boolean {
+  const scopedPersonIds = new Set(personIds);
+  return (
+    Boolean(workPackage.assigneeId && scopedPersonIds.has(workPackage.assigneeId)) ||
+    Boolean(workPackage.assignments?.some((assignment) => scopedPersonIds.has(assignment.personId)))
+  );
+}
+
+/**
+ * Filters projects list for project navigation according to role.
+ * Admin sees all; execution roles see every project they manage or participate in.
+ */
+export function filterProjectsForRole(projects: Project[], user?: User): Project[] {
+  if (!user) {
+    return projects;
+  }
+  if (userHasRole(user, "admin")) {
+    return projects;
+  }
+
+  const scopedIds = new Set([...user.managedProjectIds, ...user.participatingProjectIds]);
+  return projects.filter((project) => scopedIds.has(project.id));
+}
+
+

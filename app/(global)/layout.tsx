@@ -18,7 +18,7 @@ export default async function GlobalLayout({ children }: { children: ReactNode }
     <AppShell
       projects={snapshot.projects}
       currentUser={currentUser}
-      sidebar={<GlobalSidebar flags={flags} currentUser={currentUser} />}
+      sidebar={<GlobalSidebar flags={flags} projects={snapshot.projects} currentUser={currentUser} />}
     >
       {children}
     </AppShell>

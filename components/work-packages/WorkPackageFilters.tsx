@@ -123,10 +123,15 @@ export function filterWorkPackages<T extends import("@/lib/types").WorkPackage>(
     if (filter.status !== "all" && wp.status !== filter.status) {
       return false;
     }
-    if (filter.assigneeId === "unassigned" && wp.assigneeId) {
+    if (filter.assigneeId === "unassigned" && (wp.assigneeId || (wp.assignments?.length ?? 0) > 0)) {
       return false;
     }
-    if (filter.assigneeId !== "all" && filter.assigneeId !== "unassigned" && wp.assigneeId !== filter.assigneeId) {
+    if (
+      filter.assigneeId !== "all" &&
+      filter.assigneeId !== "unassigned" &&
+      wp.assigneeId !== filter.assigneeId &&
+      !wp.assignments?.some((assignment) => assignment.personId === filter.assigneeId)
+    ) {
       return false;
     }
     if (filter.projectId !== "all" && wp.projectId !== filter.projectId) {

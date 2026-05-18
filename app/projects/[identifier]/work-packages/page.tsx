@@ -1,6 +1,8 @@
 import { notFound } from "next/navigation";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { ProjectWorkPackagesView } from "@/components/work-packages/ProjectWorkPackagesView";
+import { listNotificationMessages } from "@/lib/services/notification-center";
+import { listProjectTeamLeadCandidates } from "@/lib/services/project-workflow";
 import { getShellRequestContext } from "@/lib/services/shell-request-context";
 
 export const dynamic = "force-dynamic";
@@ -25,6 +27,17 @@ export default async function ProjectWorkPackagesPage({ params }: PageProps) {
   const approvals = snapshot.workPackageApprovals.filter((approval) =>
     projectWorkPackages.some((wp) => wp.id === approval.workPackageId)
   );
+  const notificationMessages = currentUser
+    ? (await listNotificationMessages(currentUser)).filter((message) =>
+        message.projectId === project.id &&
+        Boolean(message.workPackageId && projectWorkPackages.some((wp) => wp.id === message.workPackageId))
+      )
+    : [];
+  const teamLeadCandidates = await listProjectTeamLeadCandidates();
+  const peopleById = new Map(snapshot.people.map((person) => [person.id, person]));
+  const teamLeadPeople = teamLeadCandidates
+    .map((candidate) => peopleById.get(candidate.personId))
+    .filter((person): person is (typeof snapshot.people)[number] => Boolean(person));
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
@@ -38,9 +51,13 @@ export default async function ProjectWorkPackagesPage({ params }: PageProps) {
       <ProjectWorkPackagesView
         project={project}
         workPackages={projectWorkPackages}
+        allWorkPackages={snapshot.workPackages}
+        projects={snapshot.projects}
         comments={comments}
         approvals={approvals}
+        notificationMessages={notificationMessages}
         people={snapshot.people}
+        teamLeadCandidates={teamLeadPeople}
         currentUser={currentUser}
       />
     </div>

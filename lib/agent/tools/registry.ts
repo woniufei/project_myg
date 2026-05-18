@@ -22,6 +22,13 @@ const projectModules = z.array(
 const workPackageType = z.enum(["task", "milestone", "risk", "phase"]);
 const priority = z.enum(["P0", "P1", "P2"]);
 const difficulty = z.enum(["low", "medium", "high", "critical"]);
+const projectPhaseInput = z.object({
+  subject: z.string(),
+  description: z.string().optional(),
+  startDate: z.string().optional(),
+  dueDate: z.string().optional(),
+  assigneeId: z.string().optional()
+});
 
 const jsonOutput = z.unknown();
 const workPackageOutput = z.object({
@@ -66,12 +73,18 @@ export const agentTools = [
       description: z.string().optional(),
       parentId: z.string().optional(),
       initialDifficulty: difficulty.optional(),
-      enabledModules: projectModules.default(["overview", "work_packages", "members", "settings"])
+      enabledModules: projectModules.default(["overview", "work_packages", "members", "settings"]),
+      phases: z.array(projectPhaseInput).min(1)
     }),
     outputSchema: jsonOutput,
     requiredPermissions: ["manageProjects"],
     writeLevel: "write",
-    handler: async (input, ctx) => ({ project: await createProject({ ...input, enabledModules: input.enabledModules as ProjectModule[] }, ctx.user) })
+    handler: async (input, ctx) => ({
+      project: await createProject(
+        { ...input, enabledModules: input.enabledModules as ProjectModule[] },
+        ctx.user
+      )
+    })
   }),
   defineTool({
     name: "project.update",

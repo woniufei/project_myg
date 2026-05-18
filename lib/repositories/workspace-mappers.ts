@@ -3,6 +3,10 @@ import type {
   NotificationChannelType,
   NotificationEventType,
   NotificationRule,
+  PermissionEffect,
+  PermissionOverride,
+  PermissionScopeType,
+  PermissionSubjectType,
   Person,
   PlatformRole,
   Priority,
@@ -12,6 +16,7 @@ import type {
   Difficulty,
   RiskLevel,
   StewardMessage,
+  Team,
   User,
   WorkPackage,
   WorkPackageApproval,
@@ -20,9 +25,14 @@ import type {
   WorkPackageCommentSource,
   WorkPackageCommentType,
   WorkPackageOrigin,
+  WorkPackageRequirement,
   WorkPackageStatus,
+  VerificationStatus,
+  WorkPackageAssignment,
+  WorkPackageAttachment,
   WorkPackageType
 } from "@/lib/types";
+import { isPersonalProjectId } from "@/lib/project-constants";
 
 export interface StoredMembership {
   projectId: string;
@@ -33,8 +43,13 @@ export interface StoredUser {
   id: string;
   name: string;
   role: string;
+  /** JSON 字符串，兼容历史角色数组存储；当前业务只使用单角色。 */
+  roles: string;
   personId: string;
   memberships: StoredMembership[];
+  /** teamLead 关联的团队信息（可选） */
+  team?: StoredTeam | null;
+  person?: { externalId?: string | null } | null;
 }
 
 export interface StoredPerson {
@@ -43,6 +58,11 @@ export interface StoredPerson {
   role: string;
   capacity: number;
   skills: string;
+  employeeNo?: string | null;
+  jobTitle?: string | null;
+  departmentCode?: string | null;
+  departmentName?: string | null;
+  externalId?: string | null;
 }
 
 export interface StoredProject {
@@ -50,6 +70,7 @@ export interface StoredProject {
   identifier: string;
   name: string;
   description: string | null;
+  createdByUserId?: string | null;
   parentId: string | null;
   status: string;
   health: string;
@@ -94,6 +115,73 @@ export interface StoredWorkPackage {
   riskLevel: string | null;
   riskImpact: string | null;
   riskMitigation: string | null;
+  updatedAt: Date;
+  requirements?: StoredWorkPackageRequirement[];
+  assignments?: StoredWorkPackageAssignment[];
+  attachments?: StoredWorkPackageAttachment[];
+  /** 核对状态 */
+  verificationStatus?: string | null;
+  /** 是否需要核对 */
+  requiresVerification?: boolean;
+  /** 核对人 User ID */
+  verifiedByUserId?: string | null;
+  /** 核对时间 */
+  verifiedAt?: Date | null;
+  /** 驳回原因 */
+  rejectedReason?: string | null;
+}
+
+export interface StoredWorkPackageRequirement {
+  id: string;
+  workPackageId: number;
+  content: string;
+  sortOrder: number;
+  createdAt: Date;
+}
+
+export interface StoredWorkPackageAssignment {
+  id: string;
+  workPackageId: number;
+  personId: string;
+  role: string;
+  responsibility: string;
+  sortOrder: number;
+  createdAt: Date;
+}
+
+export interface StoredWorkPackageAttachment {
+  id: string;
+  workPackageId: number;
+  fileName: string;
+  contentType: string;
+  size: number;
+  dataUrl: string;
+  createdAt: Date;
+}
+
+export interface StoredTeam {
+  id: string;
+  name: string;
+  description: string | null;
+  leadId: string | null;
+  memberships?: Array<{ personId: string }>;
+  manualOverride?: boolean;
+  externalId?: string | null;
+  syncedAt?: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface StoredPermissionOverride {
+  id: string;
+  subjectType: string;
+  subjectId: string;
+  permissionKey: string;
+  effect: string;
+  scopeType: string;
+  scopeId: string;
+  createdByUserId: string | null;
+  createdAt: Date;
   updatedAt: Date;
 }
 
@@ -189,16 +277,101 @@ const KNOWN_MODULES: ProjectModule[] = [
  * Maps a database user row into the workspace DTO used by UI and policy logic.
  */
 export function mapUser(user: StoredUser): User {
+  const mappedRole = mapPlatformRole(user.role);
   return {
     id: user.id,
     name: user.name,
-    role: mapPlatformRole(user.role),
+    role: mappedRole,
+    roles: parsePlatformRoleArray(user.roles).length > 0
+      ? parsePlatformRoleArray(user.roles)
+      : [mappedRole],
     personId: user.personId,
     managedProjectIds: user.memberships
       .filter((membership) => membership.isLead)
       .map((membership) => membership.projectId),
-    participatingProjectIds: user.memberships.map((membership) => membership.projectId)
+    participatingProjectIds: user.memberships.map((membership) => membership.projectId),
+    teamId: user.team?.id,
+    externalId: user.person?.externalId ?? undefined
   };
+}
+
+export function mapWorkPackageRequirement(req: StoredWorkPackageRequirement): WorkPackageRequirement {
+  return {
+    id: req.id,
+    workPackageId: req.workPackageId,
+    content: req.content,
+    sortOrder: req.sortOrder,
+    createdAt: req.createdAt?.toISOString()
+  };
+}
+
+export function mapWorkPackageAssignment(item: StoredWorkPackageAssignment): WorkPackageAssignment {
+  return {
+    id: item.id,
+    workPackageId: item.workPackageId,
+    personId: item.personId,
+    role: item.role,
+    responsibility: item.responsibility,
+    sortOrder: item.sortOrder,
+    createdAt: item.createdAt?.toISOString()
+  };
+}
+
+/**
+ * Maps persisted attachment payloads into preview-ready work-package DTOs.
+ */
+export function mapWorkPackageAttachment(item: StoredWorkPackageAttachment): WorkPackageAttachment {
+  return {
+    id: item.id,
+    workPackageId: item.workPackageId,
+    fileName: item.fileName,
+    contentType: item.contentType,
+    size: item.size,
+    dataUrl: item.dataUrl,
+    createdAt: item.createdAt?.toISOString()
+  };
+}
+
+export function mapTeam(team: StoredTeam): Team {
+  return {
+    id: team.id,
+    name: team.name,
+    description: team.description ?? undefined,
+    leadId: team.leadId ?? undefined,
+    memberIds: team.memberships?.map((membership) => membership.personId),
+    manualOverride: team.manualOverride ?? undefined,
+    externalId: team.externalId ?? undefined,
+    syncedAt: team.syncedAt?.toISOString(),
+    createdAt: team.createdAt.toISOString(),
+    updatedAt: team.updatedAt.toISOString()
+  };
+}
+
+export function mapPermissionOverride(item: StoredPermissionOverride): PermissionOverride {
+  return {
+    id: item.id,
+    subjectType: mapPermissionSubjectType(item.subjectType),
+    subjectId: item.subjectId,
+    permissionKey: item.permissionKey,
+    effect: mapPermissionEffect(item.effect),
+    scopeType: mapPermissionScopeType(item.scopeType),
+    scopeId: item.scopeId === "__global__" ? undefined : item.scopeId,
+    createdByUserId: item.createdByUserId ?? undefined,
+    createdAt: item.createdAt.toISOString(),
+    updatedAt: item.updatedAt.toISOString()
+  };
+}
+
+export function toStoredPermissionSubjectType(value: PermissionSubjectType): string {
+  return value.toUpperCase();
+}
+
+export function toStoredPermissionEffect(value: PermissionEffect): string {
+  return value.toUpperCase();
+}
+
+export function toStoredPermissionScopeType(value: PermissionScopeType): string {
+  return value.toUpperCase();
 }
 
 export function mapPerson(person: StoredPerson): Person {
@@ -207,6 +380,11 @@ export function mapPerson(person: StoredPerson): Person {
     name: person.name,
     role: person.role,
     capacity: person.capacity,
+    employeeNo: person.employeeNo ?? undefined,
+    jobTitle: person.jobTitle ?? undefined,
+    departmentCode: person.departmentCode ?? undefined,
+    departmentName: person.departmentName ?? undefined,
+    externalId: person.externalId ?? undefined,
     skills: parseStringArray(person.skills)
   };
 }
@@ -217,6 +395,7 @@ export function mapProject(project: StoredProject): Project {
     identifier: project.identifier,
     name: project.name,
     description: project.description ?? undefined,
+    createdByUserId: project.createdByUserId ?? undefined,
     parentId: project.parentId ?? undefined,
     status: mapProjectStatus(project.status),
     health: mapRiskLevel(project.health),
@@ -232,11 +411,11 @@ export function mapProject(project: StoredProject): Project {
 export function mapWorkPackage(workPackage: StoredWorkPackage): WorkPackage {
   return {
     id: workPackage.id,
-    projectId: workPackage.projectId ?? undefined,
+    projectId: isPersonalProjectId(workPackage.projectId) ? undefined : workPackage.projectId ?? undefined,
     type: mapWorkPackageType(workPackage.type),
     subject: workPackage.subject,
     description: workPackage.description,
-    status: workPackage.status as WorkPackageStatus,
+    status: mapWorkPackageStatus(workPackage.status),
     priority: workPackage.priority as Priority,
     difficulty: mapDifficulty(workPackage.difficulty ?? "MEDIUM"),
     origin: mapWorkPackageOrigin(workPackage.origin),
@@ -263,7 +442,17 @@ export function mapWorkPackage(workPackage: StoredWorkPackage): WorkPackage {
     riskLevel: workPackage.riskLevel ? mapRiskLevel(workPackage.riskLevel) : undefined,
     riskImpact: workPackage.riskImpact ?? undefined,
     riskMitigation: workPackage.riskMitigation ?? undefined,
-    lastUpdatedAt: workPackage.updatedAt.toISOString()
+    lastUpdatedAt: workPackage.updatedAt.toISOString(),
+    requirements: workPackage.requirements?.map(mapWorkPackageRequirement),
+    assignments: workPackage.assignments?.map(mapWorkPackageAssignment),
+    attachments: workPackage.attachments?.map(mapWorkPackageAttachment),
+    verificationStatus: workPackage.verificationStatus
+      ? mapVerificationStatus(workPackage.verificationStatus)
+      : undefined,
+    requiresVerification: workPackage.requiresVerification ?? undefined,
+    verifiedByUserId: workPackage.verifiedByUserId ?? undefined,
+    verifiedAt: workPackage.verifiedAt?.toISOString(),
+    rejectedReason: workPackage.rejectedReason ?? undefined
   };
 }
 
@@ -397,10 +586,35 @@ function mapPlatformRole(role: string): PlatformRole {
   const lookup: Record<string, PlatformRole> = {
     ADMIN: "admin",
     PROJECT_MANAGER: "projectManager",
+    TEAM_LEAD: "teamLead",
     PARTICIPANT: "participant"
   };
 
   return lookup[role] ?? "participant";
+}
+
+export function toStoredVerificationStatus(status: VerificationStatus): string {
+  const lookup: Record<VerificationStatus, string> = {
+    notRequired: "NOT_REQUIRED",
+    pending: "PENDING",
+    selfReportedDone: "SELF_REPORTED_DONE",
+    verified: "VERIFIED",
+    rejected: "REJECTED"
+  };
+
+  return lookup[status] ?? "NOT_REQUIRED";
+}
+
+function mapVerificationStatus(status: string): VerificationStatus {
+  const lookup: Record<string, VerificationStatus> = {
+    NOT_REQUIRED: "notRequired",
+    PENDING: "pending",
+    SELF_REPORTED_DONE: "selfReportedDone",
+    VERIFIED: "verified",
+    REJECTED: "rejected"
+  };
+
+  return lookup[status] ?? "notRequired";
 }
 
 function mapRiskLevel(level: string): RiskLevel {
@@ -443,6 +657,27 @@ function mapWorkPackageType(type: string): WorkPackageType {
   };
 
   return lookup[type] ?? "task";
+}
+
+function mapWorkPackageStatus(status: string): WorkPackageStatus {
+  const lookup: Record<string, WorkPackageStatus> = {
+    todo: "todo",
+    inProgress: "inProgress",
+    review: "review",
+    reviewFailed: "reviewFailed",
+    done: "done",
+    blocked: "blocked",
+    planned: "todo",
+    open: "todo",
+    active: "inProgress",
+    mitigating: "inProgress",
+    atRisk: "blocked",
+    achieved: "done",
+    closed: "done",
+    completed: "done"
+  };
+
+  return lookup[status] ?? "todo";
 }
 
 function mapWorkPackageOrigin(origin: string): WorkPackageOrigin {
@@ -504,6 +739,38 @@ function mapNotificationChannelType(type: string): NotificationChannelType {
   return lookup[type] ?? "generic";
 }
 
+function mapPermissionSubjectType(value: string): PermissionSubjectType {
+  const lookup: Record<string, PermissionSubjectType> = {
+    USER: "user",
+    TEAM: "team",
+    user: "user",
+    team: "team"
+  };
+  return lookup[value] ?? "user";
+}
+
+function mapPermissionEffect(value: string): PermissionEffect {
+  const lookup: Record<string, PermissionEffect> = {
+    ALLOW: "allow",
+    DENY: "deny",
+    allow: "allow",
+    deny: "deny"
+  };
+  return lookup[value] ?? "deny";
+}
+
+function mapPermissionScopeType(value: string): PermissionScopeType {
+  const lookup: Record<string, PermissionScopeType> = {
+    GLOBAL: "global",
+    PROJECT: "project",
+    TEAM: "team",
+    global: "global",
+    project: "project",
+    team: "team"
+  };
+  return lookup[value] ?? "global";
+}
+
 function parseEnabledModules(value: string): ProjectModule[] {
   return parseStringArray(value).filter((item): item is ProjectModule =>
     KNOWN_MODULES.includes(item as ProjectModule)
@@ -511,7 +778,8 @@ function parseEnabledModules(value: string): ProjectModule[] {
 }
 
 function parsePlatformRoleArray(value: string): PlatformRole[] {
-  return parseStringArray(value).map((role) => role as PlatformRole);
+  return parseStringArray(value)
+    .map((role) => mapPlatformRole(role));
 }
 
 function parseStringArray(value: string): string[] {

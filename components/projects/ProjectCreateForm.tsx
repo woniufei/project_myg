@@ -13,7 +13,19 @@ interface ProjectCreateFormProps {
   parentCandidates: Project[];
   defaultModules: ProjectModule[];
   allModules: ProjectModule[];
+  teamLeadCandidates: ProjectTeamLeadCandidate[];
   currentUserId?: string;
+  /** When true, parentId is required (TeamLead can only create sub-projects). */
+  requireParentId?: boolean;
+}
+
+interface ProjectTeamLeadCandidate {
+  userId: string;
+  personId: string;
+  personName: string;
+  personRole: string;
+  externalId?: string;
+  departmentName?: string;
 }
 
 interface FormState {
@@ -23,6 +35,16 @@ interface FormState {
   parentId: string;
   status: ProjectStatus;
   enabledModules: ProjectModule[];
+  teamLeadPersonId: string;
+  phases: ProjectPhaseDraft[];
+}
+
+interface ProjectPhaseDraft {
+  subject: string;
+  description: string;
+  startDate: string;
+  dueDate: string;
+  teamLeadPersonId: string;
 }
 
 const STATUS_OPTIONS: Array<{ value: ProjectStatus; label: string }> = [
@@ -39,7 +61,9 @@ export function ProjectCreateForm({
   parentCandidates,
   defaultModules,
   allModules,
-  currentUserId
+  teamLeadCandidates,
+  currentUserId,
+  requireParentId = false
 }: ProjectCreateFormProps) {
   const router = useRouter();
   const [state, setState] = useState<FormState>({
@@ -48,7 +72,9 @@ export function ProjectCreateForm({
     description: "",
     parentId: "",
     status: "active",
-    enabledModules: defaultModules
+    enabledModules: defaultModules,
+    teamLeadPersonId: "",
+    phases: [{ subject: "", description: "", startDate: "", dueDate: "", teamLeadPersonId: "" }]
   });
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -71,6 +97,15 @@ export function ProjectCreateForm({
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
+    if (requireParentId && !state.parentId) {
+      setError("团队负责人必须选择父项目以创建子项目");
+      return;
+    }
+    const phases = normalizePhaseDrafts(state.phases, state.teamLeadPersonId);
+    if (phases.length === 0) {
+      setError("请至少创建 1 个项目阶段");
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
@@ -86,7 +121,8 @@ export function ProjectCreateForm({
           description: state.description.trim() || undefined,
           parentId: state.parentId || undefined,
           status: state.status,
-          enabledModules: state.enabledModules
+          enabledModules: state.enabledModules,
+          phases
         })
       });
       if (!response.ok) {
@@ -141,13 +177,17 @@ export function ProjectCreateForm({
       </Field>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-        <Field label="父项目" htmlFor="project-parent">
+        <Field
+          label={`父项目${requireParentId ? "（必填）" : ""}`}
+          htmlFor="project-parent"
+        >
           <Select
             id="project-parent"
+            required={requireParentId}
             value={state.parentId}
             onChange={(event) => update("parentId", event.target.value)}
           >
-            <option value="">无（顶级项目）</option>
+            <option value="">{requireParentId ? "请选择父项目" : "无（顶级项目）"}</option>
             {parentCandidates.map((project) => (
               <option key={project.id} value={project.id}>
                 {project.name}
@@ -176,6 +216,34 @@ export function ProjectCreateForm({
         onToggle={toggleModule}
       />
 
+      <Field
+        label="人员配置（可选）"
+        htmlFor="project-team-lead"
+        hint="从管理员菜单已配置的团队负责人中选择。这里设置后会默认应用到每个新建阶段，也可在阶段内单独调整。"
+      >
+        <Select
+          id="project-team-lead"
+          value={state.teamLeadPersonId}
+          onChange={(event) => update("teamLeadPersonId", event.target.value)}
+        >
+          <option value="">暂不配置团队负责人</option>
+          {teamLeadCandidates.map((candidate) => (
+            <option key={candidate.personId} value={candidate.personId}>
+              {candidate.personName}
+              {candidate.departmentName ? ` · ${candidate.departmentName}` : ""}
+              {candidate.personRole ? ` · ${candidate.personRole}` : ""}
+            </option>
+          ))}
+        </Select>
+      </Field>
+
+      <PhaseEditor
+        phases={state.phases}
+        teamLeadCandidates={teamLeadCandidates}
+        defaultTeamLeadPersonId={state.teamLeadPersonId}
+        onChange={(phases) => update("phases", phases)}
+      />
+
       {error ? <p style={{ color: "var(--danger-fg)", margin: 0, fontSize: 12 }}>{error}</p> : null}
 
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
@@ -188,6 +256,114 @@ export function ProjectCreateForm({
       </div>
     </form>
   );
+}
+
+function PhaseEditor({
+  phases,
+  teamLeadCandidates,
+  defaultTeamLeadPersonId,
+  onChange
+}: {
+  phases: ProjectPhaseDraft[];
+  teamLeadCandidates: ProjectTeamLeadCandidate[];
+  defaultTeamLeadPersonId: string;
+  onChange: (phases: ProjectPhaseDraft[]) => void;
+}) {
+  const rows = phases.length > 0
+    ? phases
+    : [{ subject: "", description: "", startDate: "", dueDate: "", teamLeadPersonId: "" }];
+  return (
+    <div className="muted-card" style={{ padding: 12, display: "grid", gap: 10 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+        <div>
+          <span className="label">项目阶段 *</span>
+          <p className="hint" style={{ margin: "4px 0 0", fontSize: 11 }}>
+            阶段创建后，团队负责人可在阶段下挂载项目节点。
+          </p>
+        </div>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          onClick={() => onChange([...rows, { subject: "", description: "", startDate: "", dueDate: "", teamLeadPersonId: "" }])}
+        >
+          + 新增阶段
+        </Button>
+      </div>
+      {rows.map((phase, index) => (
+        <div key={index} style={{ display: "grid", gap: 8, borderTop: index === 0 ? undefined : "1px solid var(--border-muted)", paddingTop: index === 0 ? 0 : 10 }}>
+          <Input
+            value={phase.subject}
+            placeholder={`阶段 ${index + 1} 名称，例如：样件试制与联调`}
+            onChange={(event) => onChange(rows.map((item, itemIndex) =>
+              itemIndex === index ? { ...item, subject: event.target.value } : item
+            ))}
+          />
+          <Textarea
+            rows={2}
+            value={phase.description}
+            placeholder="阶段目标、边界或验收口径"
+            onChange={(event) => onChange(rows.map((item, itemIndex) =>
+              itemIndex === index ? { ...item, description: event.target.value } : item
+            ))}
+          />
+          <Select
+            value={phase.teamLeadPersonId}
+            onChange={(event) => onChange(rows.map((item, itemIndex) =>
+              itemIndex === index ? { ...item, teamLeadPersonId: event.target.value } : item
+            ))}
+          >
+            <option value="">
+              {defaultTeamLeadPersonId ? "使用项目人员配置" : "暂不配置阶段团队负责人"}
+            </option>
+            {teamLeadCandidates.map((candidate) => (
+              <option key={candidate.personId} value={candidate.personId}>
+                {candidate.personName}
+                {candidate.departmentName ? ` · ${candidate.departmentName}` : ""}
+              </option>
+            ))}
+          </Select>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 8 }}>
+            <Input
+              type="date"
+              value={phase.startDate}
+              onChange={(event) => onChange(rows.map((item, itemIndex) =>
+                itemIndex === index ? { ...item, startDate: event.target.value } : item
+              ))}
+            />
+            <Input
+              type="date"
+              value={phase.dueDate}
+              onChange={(event) => onChange(rows.map((item, itemIndex) =>
+                itemIndex === index ? { ...item, dueDate: event.target.value } : item
+              ))}
+            />
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              disabled={rows.length === 1}
+              onClick={() => onChange(rows.filter((_, itemIndex) => itemIndex !== index))}
+            >
+              删除
+            </Button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function normalizePhaseDrafts(phases: ProjectPhaseDraft[], defaultTeamLeadPersonId: string) {
+  return phases
+    .map((phase) => ({
+      subject: phase.subject.trim(),
+      description: phase.description.trim() || undefined,
+      startDate: phase.startDate || undefined,
+      dueDate: phase.dueDate || undefined,
+      teamLeadPersonId: phase.teamLeadPersonId || defaultTeamLeadPersonId || undefined
+    }))
+    .filter((phase) => phase.subject.length > 0);
 }
 
 function Field({

@@ -38,7 +38,7 @@ export function buildSchedulingSuggestions(snapshot: WorkspaceSnapshot): Schedul
 
   return snapshot.workPackages
     .filter((wp) => wp.type !== "risk")
-    .filter((wp) => wp.status !== "done" && wp.status !== "completed" && wp.status !== "closed")
+    .filter((wp) => wp.status !== "done")
     .map<SchedulingSuggestion | null>((wp) => {
       const ranked = rankPeopleForWorkPackage(wp, personScores);
       const best = ranked[0];

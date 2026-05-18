@@ -13,12 +13,14 @@ import {
   WorkPackagesIcon
 } from "./sidebar-icons";
 import type { ReactNode } from "react";
-import type { Project, ProjectModule } from "@/lib/types";
+import type { PlatformRole, Project, ProjectModule, User } from "@/lib/types";
+import { getUserRoles } from "@/lib/rbac";
 import { projectStatusLabel, projectStatusTone } from "@/lib/work-package-presentation";
 import { Badge } from "@/components/primer/Badge";
 
 interface ProjectSidebarProps {
   project: Project;
+  currentUser?: User;
 }
 
 interface ModuleNavItem {
@@ -27,6 +29,7 @@ interface ModuleNavItem {
   label: string;
   icon: ReactNode;
   matches?: (pathname: string, identifier: string) => boolean;
+  visibleFor?: PlatformRole[];
 }
 
 const moduleItems: ModuleNavItem[] = [
@@ -34,7 +37,8 @@ const moduleItems: ModuleNavItem[] = [
     module: "overview",
     href: (id) => `/projects/${id}/overview`,
     label: "概览",
-    icon: <OverviewIcon />
+    icon: <OverviewIcon />,
+    visibleFor: ["admin", "projectManager"]
   },
   {
     module: "work_packages",
@@ -47,47 +51,55 @@ const moduleItems: ModuleNavItem[] = [
     module: "boards",
     href: (id) => `/projects/${id}/boards`,
     label: "看板",
-    icon: <BoardsIcon />
+    icon: <BoardsIcon />,
+    visibleFor: ["admin", "projectManager", "teamLead"]
   },
   {
     module: "gantt",
     href: (id) => `/projects/${id}/gantt`,
     label: "甘特图",
-    icon: <GanttIcon />
+    icon: <GanttIcon />,
+    visibleFor: ["admin"]
   },
   {
     module: "members",
     href: (id) => `/projects/${id}/members`,
     label: "成员",
-    icon: <MembersIcon />
+    icon: <MembersIcon />,
+    visibleFor: ["admin", "projectManager", "teamLead"]
   },
   {
     module: "ai_diagnosis",
     href: (id) => `/projects/${id}/ai-diagnosis`,
     label: "AI 诊断",
-    icon: <AIDiagnosisIcon />
+    icon: <AIDiagnosisIcon />,
+    visibleFor: ["admin"]
   },
   {
     module: "ai_breakdown",
     href: (id) => `/projects/${id}/ai-breakdown`,
     label: "AI 拆解",
-    icon: <AIBreakdownIcon />
+    icon: <AIBreakdownIcon />,
+    visibleFor: ["admin"]
   },
   {
     module: "settings",
     href: (id) => `/projects/${id}/settings`,
     label: "项目设置",
-    icon: <SettingsIcon />
+    icon: <SettingsIcon />,
+    visibleFor: ["admin", "projectManager"]
   }
 ];
 
 /**
  * Project-context sidebar. Items are filtered by `project.enabledModules`
- * to mirror OpenProject's per-project module toggles.
+ * to mirror OpenProject's per-project module toggles, and further filtered
+ * by the current user's role.
  */
-export function ProjectSidebar({ project }: ProjectSidebarProps) {
+export function ProjectSidebar({ project, currentUser }: ProjectSidebarProps) {
   const pathname = usePathname();
   const enabled = new Set(project.enabledModules);
+  const currentRoles = getUserRoles(currentUser);
 
   return (
     <aside className="app-sidebar" aria-label={`${project.name} 模块导航`}>
@@ -104,6 +116,15 @@ export function ProjectSidebar({ project }: ProjectSidebarProps) {
         <nav style={{ display: "flex", flexDirection: "column", gap: 1 }}>
           {moduleItems.map((item) => {
             if (!enabled.has(item.module)) {
+              return null;
+            }
+            // Role-based visibility filter
+            if (item.visibleFor && currentUser) {
+              if (!item.visibleFor.some((role) => currentRoles.includes(role))) {
+                return null;
+              }
+            }
+            if (item.visibleFor && !currentUser) {
               return null;
             }
             const href = item.href(project.identifier);

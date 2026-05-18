@@ -19,6 +19,7 @@ describe("workspace repository mappers", () => {
       id: "u-pm",
       name: "项目经理",
       role: "PROJECT_MANAGER",
+      roles: '["PROJECT_MANAGER"]',
       personId: "p1",
       memberships: [
         { projectId: "proj-a", isLead: true },
@@ -41,6 +42,8 @@ describe("workspace repository mappers", () => {
       status: "ACTIVE",
       health: "MEDIUM",
       progress: 42,
+      startDate: null,
+      endDate: null,
       enabledModules: JSON.stringify(["overview", "work_packages", "boards", "unknown_module"])
     });
 
@@ -71,6 +74,7 @@ describe("workspace repository mappers", () => {
       lastProgressNote: "等待确认",
       dependencies: JSON.stringify([1]),
       requiredSkills: JSON.stringify(["接口设计"]),
+      isOnCriticalPath: false,
       riskLevel: null,
       riskImpact: null,
       riskMitigation: null,
@@ -106,6 +110,7 @@ describe("workspace repository mappers", () => {
       lastProgressNote: "等待 SSH",
       dependencies: JSON.stringify([]),
       requiredSkills: JSON.stringify([]),
+      isOnCriticalPath: false,
       riskLevel: "MEDIUM",
       riskImpact: "无法完成真实部署",
       riskMitigation: "GitHub Secrets",

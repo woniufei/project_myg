@@ -11,32 +11,18 @@ const STATUS_LABELS: Record<string, string> = {
   todo: "待处理",
   inProgress: "进行中",
   review: "评审中",
+  reviewFailed: "评审中",
   done: "已完成",
-  blocked: "阻塞",
-  planned: "已规划",
-  achieved: "已达成",
-  atRisk: "风险中",
-  open: "开放",
-  mitigating: "缓解中",
-  closed: "已关闭",
-  active: "进行中",
-  completed: "已完成"
+  blocked: "阻塞"
 };
 
 const STATUS_TONES: Record<string, BadgeTone> = {
   todo: "default",
   inProgress: "accent",
   review: "attention",
+  reviewFailed: "attention",
   done: "success",
-  blocked: "danger",
-  planned: "default",
-  achieved: "success",
-  atRisk: "danger",
-  open: "attention",
-  mitigating: "accent",
-  closed: "success",
-  active: "accent",
-  completed: "success"
+  blocked: "danger"
 };
 
 const TYPE_LABELS: Record<WorkPackageType, string> = {

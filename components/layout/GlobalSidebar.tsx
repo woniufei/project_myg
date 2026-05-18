@@ -4,15 +4,19 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   AdminIcon,
-  LaunchIcon,
+  BoardsIcon,
+  MembersIcon,
   MyWorkIcon,
   NotificationsIcon,
   OverviewIcon,
   ProjectsIcon,
+  SettingsIcon,
+  TeamIcon,
   WorkPackagesIcon
 } from "./sidebar-icons";
 import type { PlatformFeatureFlagDto } from "@/lib/services/feature-flags";
-import type { User } from "@/lib/types";
+import { getUserRoles, userHasRole } from "@/lib/rbac";
+import type { PlatformRole, Project, User } from "@/lib/types";
 import type { ReactNode } from "react";
 
 interface GlobalNavItem {
@@ -21,40 +25,50 @@ interface GlobalNavItem {
   icon: ReactNode;
   flagKey?: PlatformFeatureFlagDto["key"];
   matches?: (pathname: string) => boolean;
+  visibleFor?: PlatformRole[];
 }
 
 const items: GlobalNavItem[] = [
   {
-    href: "/launch",
-    label: "启动",
-    icon: <LaunchIcon />,
-    flagKey: "launchPage",
-    matches: (pathname) => pathname.startsWith("/launch")
-  },
-  {
     href: "/my/page",
     label: "我的工作",
     icon: <MyWorkIcon />,
-    matches: (pathname) => pathname.startsWith("/my")
+    matches: (pathname) => pathname === "/my/page" || pathname.startsWith("/my/work-packages")
+  },
+  {
+    href: "/my/projects",
+    label: "我的项目",
+    icon: <ProjectsIcon />,
+    matches: (pathname) => pathname.startsWith("/my/projects"),
+    visibleFor: ["projectManager", "teamLead", "participant"]
   },
   {
     href: "/overview",
     label: "平台总览",
     icon: <OverviewIcon />,
     flagKey: "platformOverview",
-    matches: (pathname) => pathname.startsWith("/overview")
+    matches: (pathname) => pathname.startsWith("/overview"),
+    visibleFor: ["admin"]
   },
   {
     href: "/projects",
     label: "项目",
     icon: <ProjectsIcon />,
-    matches: (pathname) => pathname === "/projects" || pathname.startsWith("/projects/new")
+    matches: (pathname) => pathname === "/projects" || pathname.startsWith("/projects/new"),
+    visibleFor: ["admin"]
   },
   {
     href: "/work-packages",
     label: "工作项",
     icon: <WorkPackagesIcon />,
     matches: (pathname) => pathname.startsWith("/work-packages")
+  },
+  {
+    href: "/team",
+    label: "我的团队",
+    icon: <TeamIcon />,
+    matches: (pathname) => pathname.startsWith("/team"),
+    visibleFor: ["admin", "teamLead"]
   },
   {
     href: "/notifications",
@@ -66,7 +80,8 @@ const items: GlobalNavItem[] = [
     href: "/admin",
     label: "管理员",
     icon: <AdminIcon />,
-    matches: (pathname) => pathname.startsWith("/admin")
+    matches: (pathname) => pathname.startsWith("/admin"),
+    visibleFor: ["admin"]
   }
 ];
 
@@ -76,15 +91,30 @@ const items: GlobalNavItem[] = [
  */
 export function GlobalSidebar({
   flags = [],
-  currentUser
+  projects = [],
+  currentUser,
+  contextualProject
 }: {
   flags?: PlatformFeatureFlagDto[];
+  projects?: Project[];
   currentUser?: User;
+  contextualProject?: Project;
 }) {
   const pathname = usePathname();
-  const visibleItems = items.filter(
-    (item) => !item.flagKey || isSidebarFlagEnabled(flags, item.flagKey, currentUser)
-  );
+  const currentRoles = getUserRoles(currentUser);
+  const roleItems = buildRoleItems(contextualProject ?? resolvePrimaryProject(projects, currentUser), currentUser);
+  const visibleItems = [...items, ...roleItems].filter((item) => {
+    if (item.flagKey && !isSidebarFlagEnabled(flags, item.flagKey, currentUser)) {
+      return false;
+    }
+    if (item.visibleFor && currentUser) {
+      return item.visibleFor.some((role) => currentRoles.includes(role));
+    }
+    if (item.visibleFor && !currentUser) {
+      return false;
+    }
+    return true;
+  });
 
   return (
     <aside className="app-sidebar" aria-label="全局模块">
@@ -111,6 +141,51 @@ export function GlobalSidebar({
   );
 }
 
+function buildRoleItems(project: Project | undefined, user?: User): GlobalNavItem[] {
+  if (!project || userHasRole(user, "admin") || userHasRole(user, "participant")) {
+    return [];
+  }
+
+  const projectItems: GlobalNavItem[] = [
+    {
+      href: `/projects/${project.identifier}/boards`,
+      label: "看板",
+      icon: <BoardsIcon />,
+      matches: (pathname) => pathname.startsWith(`/projects/${project.identifier}/boards`)
+    },
+    {
+      href: `/projects/${project.identifier}/members`,
+      label: "成员",
+      icon: <MembersIcon />,
+      matches: (pathname) => pathname.startsWith(`/projects/${project.identifier}/members`)
+    }
+  ];
+
+  if (userHasRole(user, "projectManager")) {
+    projectItems.push({
+      href: `/projects/${project.identifier}/settings`,
+      label: "项目设置",
+      icon: <SettingsIcon />,
+      matches: (pathname) => pathname.startsWith(`/projects/${project.identifier}/settings`)
+    });
+  }
+
+  return projectItems;
+}
+
+function resolvePrimaryProject(projects: Project[], user?: User): Project | undefined {
+  if (!user) {
+    return undefined;
+  }
+  if (userHasRole(user, "projectManager")) {
+    return projects.find((project) => user.managedProjectIds.includes(project.id));
+  }
+  if (userHasRole(user, "teamLead")) {
+    return projects.find((project) => user.participatingProjectIds.includes(project.id));
+  }
+  return undefined;
+}
+
 function isSidebarFlagEnabled(
   flags: PlatformFeatureFlagDto[],
   key: PlatformFeatureFlagDto["key"],
@@ -121,5 +196,6 @@ function isSidebarFlagEnabled(
     return false;
   }
 
-  return user ? flag.roleOverrides[user.role] ?? true : true;
+  const roles = getUserRoles(user);
+  return user ? roles.some((role) => flag.roleOverrides[role] ?? true) : true;
 }

@@ -13,7 +13,7 @@ export function calculateDashboardStats(snapshot: WorkspaceSnapshot): DashboardS
   const taskLike = workPackages.filter((wp) => wp.type !== "risk");
   const risks = workPackages.filter((wp) => wp.type === "risk");
 
-  const doneCount = taskLike.filter((wp) => wp.status === "done" || wp.status === "completed").length;
+  const doneCount = taskLike.filter((wp) => wp.status === "done").length;
   const blockedCount = taskLike.filter((wp) => wp.status === "blocked").length;
   const highRiskCount = risks.filter((wp) => wp.riskLevel === "High").length;
   const averageProgress = snapshot.projects.length
@@ -28,8 +28,7 @@ export function calculateDashboardStats(snapshot: WorkspaceSnapshot): DashboardS
       .filter(
         (wp) =>
           wp.assigneeId === person.id &&
-          wp.status !== "done" &&
-          wp.status !== "completed"
+          wp.status !== "done"
       )
       .reduce((total, wp) => total + (wp.estimateHours ?? 0), 0);
 

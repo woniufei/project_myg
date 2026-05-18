@@ -41,7 +41,16 @@ enum ProjectStatus {
 enum PlatformRole {
   ADMIN
   PROJECT_MANAGER
+  TEAM_LEAD
   PARTICIPANT
+}
+
+enum VerificationStatus {
+  NOT_REQUIRED
+  PENDING
+  SELF_REPORTED_DONE
+  VERIFIED
+  REJECTED
 }
 
 enum WorkPackageOrigin {
@@ -90,6 +99,22 @@ enum NotificationDeliveryStatus {
   FAILED
 }
 
+enum NotificationActivityType {
+  COMMENT
+  DECISION
+  BLOCKER
+  EVIDENCE
+  APPROVAL
+  PROGRESS
+}
+
+enum NotificationDecisionStatus {
+  NONE
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum AgentBreakdownDraftStatus {
   PENDING
   CONFIRMED
@@ -97,15 +122,113 @@ enum AgentBreakdownDraftStatus {
 }
 
 model Person {
-  id           String                @id @default(cuid())
-  name         String
-  role         String
-  capacity     Int
-  skills       String                @default("[]")
-  workPackages WorkPackage[]         @relation("AssignedWorkPackages")
-  users        User[]
-  comments     WorkPackageComment[]
-  approvals    WorkPackageApproval[]
+  id              String                @id @default(cuid())
+  name            String
+  role            String
+  capacity        Int
+  skills          String                @default("[]")
+  employeeNo      String?
+  jobTitle        String?
+  departmentCode  String?
+  departmentName  String?
+  externalId      String?               @unique
+  workPackages    WorkPackage[]         @relation("AssignedWorkPackages")
+  workPackageAssignments WorkPackageAssignment[]
+  users           User[]
+  comments        WorkPackageComment[]
+  approvals       WorkPackageApproval[]
+  teamMemberships TeamMembership[]
+  externalPerson  ExternalPerson?
+  sentNotificationMessages     NotificationMessage[] @relation("SentNotificationMessages")
+  receivedNotificationMessages NotificationMessage[] @relation("ReceivedNotificationMessages")
+}
+
+model ExternalDepartment {
+  id             String              @id @default(cuid())
+  externalId     String              @unique
+  name           String
+  parentId       String?
+  code           String?
+  leaderId       String?
+  leaderName     String?
+  memberCount    Int                 @default(0)
+  rawJson        String              @default("{}")
+  syncedAt       DateTime            @default(now())
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  parent         ExternalDepartment? @relation("DepartmentHierarchy", fields: [parentId], references: [id])
+  children       ExternalDepartment[] @relation("DepartmentHierarchy")
+  persons        ExternalPerson[]
+
+  @@index([parentId])
+  @@index([externalId])
+}
+
+model ExternalPerson {
+  id              String              @id @default(cuid())
+  externalId      String              @unique
+  name            String
+  email           String?
+  phone           String?
+  employeeNo      String?
+  jobTitle        String?
+  departmentCode  String?
+  departmentName  String?
+  departmentId    String?
+  isLeader        Boolean             @default(false)
+  status          String              @default("active")
+  avatarUrl       String?
+  rawJson         String              @default("{}")
+  syncedAt        DateTime            @default(now())
+  personId        String?             @unique
+  department      ExternalDepartment? @relation(fields: [departmentId], references: [id])
+  person          Person?             @relation(fields: [personId], references: [id])
+
+  @@index([departmentId])
+  @@index([personId])
+  @@index([externalId])
+}
+
+model ExternalSyncRun {
+  id            String   @id @default(cuid())
+  triggerType   String
+  status        String
+  deptsAdded    Int      @default(0)
+  deptsUpdated  Int      @default(0)
+  personsAdded  Int      @default(0)
+  personsUpdated Int     @default(0)
+  errorMessage  String?
+  startedAt     DateTime @default(now())
+  finishedAt    DateTime?
+
+  @@index([startedAt])
+}
+
+model Team {
+  id             String           @id @default(cuid())
+  name           String
+  description    String?
+  leadId         String?
+  manualOverride Boolean          @default(false)
+  externalId     String?          @unique
+  syncedAt       DateTime?
+  memberships    TeamMembership[]
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@index([externalId])
+}
+
+model TeamMembership {
+  id       String @id @default(cuid())
+  teamId   String
+  personId String
+  team     Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  person   Person @relation(fields: [personId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, personId])
+  @@index([teamId])
+  @@index([personId])
 }
 
 model Project {
@@ -113,6 +236,7 @@ model Project {
   identifier           String                @unique
   name                 String
   description          String?
+  createdByUserId      String?
   parentId             String?
   parent               Project?              @relation("ProjectHierarchy", fields: [parentId], references: [id])
   children             Project[]             @relation("ProjectHierarchy")
@@ -128,6 +252,7 @@ model Project {
   memberships          ProjectMembership[]
   stewardMessages      StewardMessage[]
   notificationRules    NotificationRule[]
+  notificationMessages NotificationMessage[]
   agentBreakdownDrafts AgentBreakdownDraft[]
   qualitySnapshots     ProjectQualitySnapshot[]
   qualityMetrics       ProjectQualityMetric[]
@@ -135,12 +260,14 @@ model Project {
   updatedAt            DateTime              @updatedAt
 
   @@index([parentId])
+  @@index([createdByUserId])
 }
 
 model User {
   id                   String                @id @default(cuid())
   name                 String
   role                 PlatformRole
+  roles                String                @default("[]")
   personId             String
   person               Person                @relation(fields: [personId], references: [id])
   memberships          ProjectMembership[]
@@ -148,6 +275,8 @@ model User {
   agentApiKeys         AgentApiKey[]
   agentInvocations     AgentToolInvocation[] @relation("CallerUserInvocations")
   createdWorkPackages  WorkPackage[]         @relation("CreatedWorkPackages")
+  notificationMessages  NotificationMessage[] @relation("UserNotificationMessages")
+  decidedNotifications  NotificationMessage[] @relation("DecidedNotificationMessages")
   createdAt            DateTime              @default(now())
 }
 
@@ -164,7 +293,7 @@ model ProjectMembership {
 
 model WorkPackage {
   id               Int                   @id @default(autoincrement())
-  projectId        String?
+  projectId        String                @default("personProject")
   type             WorkPackageType       @default(TASK)
   subject          String
   description      String                @default("")
@@ -197,15 +326,24 @@ model WorkPackage {
   riskLevel        RiskLevel?
   riskImpact       String?
   riskMitigation   String?
-  project          Project?              @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  project          Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
   createdBy        User                  @relation("CreatedWorkPackages", fields: [createdByUserId], references: [id])
   assignee         Person?               @relation("AssignedWorkPackages", fields: [assigneeId], references: [id])
   comments         WorkPackageComment[]
   approvals        WorkPackageApproval[]
+  notificationMessages NotificationMessage[]
   progressEvents   WorkPackageProgressEvent[]
   impactSources    WorkPackageImpactEvent[] @relation("ImpactSource")
   impactTargets    WorkPackageImpactEvent[] @relation("ImpactTarget")
-  createdAt        DateTime              @default(now())
+  verificationStatus      VerificationStatus @default(NOT_REQUIRED)
+  requiresVerification   Boolean            @default(false)
+  verifiedByUserId       String?
+  verifiedAt             DateTime?
+  rejectedReason         String?
+  requirements           WorkPackageRequirement[]
+  assignments            WorkPackageAssignment[]
+  attachments            WorkPackageAttachment[]
+  createdAt              DateTime              @default(now())
   updatedAt        DateTime              @updatedAt
 
   @@index([projectId, type])
@@ -213,6 +351,49 @@ model WorkPackage {
   @@index([createdByUserId])
   @@index([assigneeId])
   @@index([parentId])
+}
+
+model WorkPackageRequirement {
+  id            String      @id @default(cuid())
+  workPackageId Int
+  content       String
+  sortOrder     Int         @default(0)
+  createdAt     DateTime    @default(now())
+  workPackage   WorkPackage @relation(fields: [workPackageId], references: [id], onDelete: Cascade)
+
+  @@index([workPackageId])
+  @@index([workPackageId, sortOrder])
+}
+
+model WorkPackageAssignment {
+  id             String      @id @default(cuid())
+  workPackageId  Int
+  personId       String
+  role           String      @default("执行成员")
+  responsibility String      @default("")
+  sortOrder      Int         @default(0)
+  createdAt      DateTime    @default(now())
+  workPackage    WorkPackage @relation(fields: [workPackageId], references: [id], onDelete: Cascade)
+  person         Person      @relation(fields: [personId], references: [id], onDelete: Cascade)
+
+  @@unique([workPackageId, personId])
+  @@index([workPackageId])
+  @@index([personId])
+  @@index([workPackageId, sortOrder])
+}
+
+model WorkPackageAttachment {
+  id            String      @id @default(cuid())
+  workPackageId Int
+  fileName      String
+  contentType   String
+  size          Int
+  dataUrl       String
+  createdAt     DateTime    @default(now())
+  workPackage   WorkPackage @relation(fields: [workPackageId], references: [id], onDelete: Cascade)
+
+  @@index([workPackageId])
+  @@index([workPackageId, createdAt])
 }
 
 model WorkPackageComment {
@@ -229,6 +410,7 @@ model WorkPackageComment {
   authorDisplayName String?
   workPackage       WorkPackage              @relation(fields: [workPackageId], references: [id], onDelete: Cascade)
   author            Person                   @relation(fields: [authorPersonId], references: [id])
+  notificationMessages NotificationMessage[]
   createdAt         DateTime                 @default(now())
 
   @@unique([source, externalMessageId])
@@ -243,6 +425,7 @@ model WorkPackageApproval {
   comment          String
   workPackage      WorkPackage               @relation(fields: [workPackageId], references: [id], onDelete: Cascade)
   reviewer         Person                    @relation(fields: [reviewerPersonId], references: [id])
+  notificationMessages NotificationMessage[]
   createdAt        DateTime                  @default(now())
 
   @@index([workPackageId, createdAt])
@@ -352,6 +535,54 @@ model NotificationDelivery {
   createdAt      DateTime                   @default(now())
 }
 
+model NotificationTemplate {
+  id               String                   @id @default(cuid())
+  activityType     NotificationActivityType @unique
+  name             String
+  titleTemplate    String
+  bodyTemplate     String
+  cardTemplateJson String                   @default("{}")
+  enabled          Boolean                  @default(true)
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime                 @updatedAt
+}
+
+model NotificationMessage {
+  id                String                     @id @default(cuid())
+  projectId         String
+  workPackageId     Int?
+  commentId         String?
+  approvalId        String?
+  senderPersonId    String?
+  recipientPersonId String
+  recipientUserId   String?
+  activityType      NotificationActivityType
+  title             String
+  body              String
+  actionRequired    Boolean                    @default(false)
+  decisionStatus    NotificationDecisionStatus @default(NONE)
+  readAt            DateTime?
+  decidedByUserId   String?
+  decidedAt         DateTime?
+  payloadJson       String                     @default("{}")
+  createdAt         DateTime                   @default(now())
+  project           Project                    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  workPackage       WorkPackage?               @relation(fields: [workPackageId], references: [id], onDelete: Cascade)
+  comment           WorkPackageComment?        @relation(fields: [commentId], references: [id], onDelete: SetNull)
+  approval          WorkPackageApproval?       @relation(fields: [approvalId], references: [id], onDelete: SetNull)
+  senderPerson      Person?                    @relation("SentNotificationMessages", fields: [senderPersonId], references: [id], onDelete: SetNull)
+  recipientPerson   Person                     @relation("ReceivedNotificationMessages", fields: [recipientPersonId], references: [id], onDelete: Cascade)
+  recipientUser     User?                      @relation("UserNotificationMessages", fields: [recipientUserId], references: [id], onDelete: SetNull)
+  decidedBy         User?                      @relation("DecidedNotificationMessages", fields: [decidedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([recipientUserId, createdAt])
+  @@index([recipientPersonId, createdAt])
+  @@index([projectId, createdAt])
+  @@index([workPackageId, createdAt])
+  @@index([commentId])
+  @@index([activityType, decisionStatus])
+}
+
 model PlatformFeatureFlag {
   key           String   @id
   siteEnabled   Boolean  @default(true)
@@ -359,6 +590,24 @@ model PlatformFeatureFlag {
   description   String
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+}
+
+model PermissionOverride {
+  id              String   @id @default(cuid())
+  subjectType     String
+  subjectId       String
+  permissionKey   String
+  effect          String
+  scopeType       String   @default("global")
+  scopeId         String   @default("__global__")
+  createdByUserId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([subjectType, subjectId, permissionKey, scopeType, scopeId])
+  @@index([subjectType, subjectId])
+  @@index([permissionKey])
+  @@index([scopeType, scopeId])
 }
 
 model AgentApiKey {

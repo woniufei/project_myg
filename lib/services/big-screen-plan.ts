@@ -1,7 +1,7 @@
 import { calculateCriticalPathIds } from "@/lib/intelligence/critical-path";
 import { prisma } from "@/lib/prisma";
 import type { Person, Project, User, WorkPackage, WorkspaceSnapshot } from "@/lib/types";
-import { ServiceError } from "./auth-context";
+import { canAccessProject, resolveUserFromSnapshot, ServiceError } from "./auth-context";
 import { loadWorkspaceSnapshot } from "./workspace";
 
 export type PlanNodeShape = "milestone" | "task";
@@ -188,7 +188,13 @@ export async function loadScreenPlan(options: {
   const { snapshot } = await loadWorkspaceSnapshot(
     options.user ? { userId: options.user.id } : {}
   );
-  const project = resolveVisibleProject(snapshot.projects, options.projectId, options.user, options.anonymousFallback);
+  const scopedUser = options.user ? resolveUserFromSnapshot(snapshot, options.user) : undefined;
+  const project = resolveVisibleProject(
+    snapshot.projects,
+    options.projectId,
+    scopedUser,
+    options.anonymousFallback
+  );
 
   const baselinePlan = derivePlanMetrics(buildPlanFromWorkspace(project, snapshot));
   const baselineRow = await ensureBaseline(project.id, baselinePlan);
@@ -233,7 +239,8 @@ export async function createScenario(options: {
   name?: string;
 }) {
   const { snapshot } = await loadWorkspaceSnapshot({ userId: options.user.id });
-  const project = resolveVisibleProject(snapshot.projects, options.projectId, options.user);
+  const scopedUser = resolveUserFromSnapshot(snapshot, options.user);
+  const project = resolveVisibleProject(snapshot.projects, options.projectId, scopedUser);
   const baselinePlan = derivePlanMetrics(buildPlanFromWorkspace(project, snapshot));
   const baseline = await ensureBaseline(project.id, baselinePlan);
 
@@ -428,7 +435,13 @@ export async function recordProjectStateSnapshot(options: {
     | "PROJECT_COMPLETED";
 }) {
   const { snapshot } = await loadWorkspaceSnapshot(options.user ? { userId: options.user.id } : {});
-  const project = resolveVisibleProject(snapshot.projects, options.projectId, options.user, options.user === undefined);
+  const scopedUser = options.user ? resolveUserFromSnapshot(snapshot, options.user) : undefined;
+  const project = resolveVisibleProject(
+    snapshot.projects,
+    options.projectId,
+    scopedUser,
+    options.user === undefined
+  );
   const plan = derivePlanMetrics(buildPlanFromWorkspace(project, snapshot));
   await recordQualitySnapshot({
     plan,
@@ -454,7 +467,7 @@ function resolveVisibleProject(
   if (anonymousFallback) {
     return project;
   }
-  if (user && user.role !== "admin" && !user.participatingProjectIds.includes(project.id)) {
+  if (user && !canAccessProject(user, project.id)) {
     throw new ServiceError("当前用户无权查看该项目大屏。", 403);
   }
   return project;
@@ -478,7 +491,7 @@ function buildPlanFromWorkspace(project: Project, snapshot: WorkspaceSnapshot): 
           type: "phase",
           subject: "总体计划",
           description: project.description ?? "",
-          status: "active",
+          status: "inProgress",
           priority: "P1",
           origin: "manager",
           createdByUserId: "",
@@ -690,7 +703,7 @@ export function derivePlanMetrics(plan: PlanModel): PlanModel {
     const blockedTasks = tasks.filter((task) => task.isBlocked);
     const delayedTasks = tasks.filter((task) => (task.delayDays ?? 0) > 0);
     const nodeDirectDelayDays = Math.max(
-      calculateNodeScheduleDelayDays({ ...node, startDate, endDate, progress }, today),
+      calculateNodeScheduleDelayDays({ endDate, date: node.date, progress }, today),
       ...tasks.map((task) => task.delayDays ?? 0)
     );
     const blockedReason = node.blockedReason ?? blockedTasks[0]?.blockedReason;
@@ -815,7 +828,7 @@ function riskLevelFromWorkPackage(item: WorkPackage): PlanRiskLevel | undefined 
 }
 
 function isBlockedWorkPackage(item: WorkPackage): boolean {
-  return ["blocked", "atRisk"].includes(item.status) || Boolean(item.blockedStartedAt && !item.blockedResolvedAt);
+  return item.status === "blocked" || Boolean(item.blockedStartedAt && !item.blockedResolvedAt);
 }
 
 function calculateTaskDelayDays(task: PlanTask, today: Date, propagatedDelayDays = 0): number {
@@ -1142,8 +1155,7 @@ function toStoredRiskLevel(value: PlanRiskLevel): "LOW" | "MEDIUM" | "HIGH" {
   return value.toUpperCase() as "LOW" | "MEDIUM" | "HIGH";
 }
 
-function statusFromProgress(progress: number, shape: PlanNodeShape): string {
-  if (shape === "milestone") return progress >= 100 ? "achieved" : "planned";
+function statusFromProgress(progress: number, _shape: PlanNodeShape): string {
   if (progress >= 100) return "done";
   if (progress > 0) return "inProgress";
   return "todo";
@@ -1219,7 +1231,6 @@ async function recordQualitySnapshot(options: {
       impactSourceNodeIds: node.impactSourceNodeIds,
       estimateHours: node.estimateHours,
       riskLevel: node.riskLevel,
-      isBlocked: node.isBlocked,
       startDate: node.startDate,
       endDate: node.endDate,
       ownerPersonId: node.ownerPersonId,
@@ -1271,11 +1282,12 @@ function buildQualityMetrics(snapshotId: string, plan: PlanModel) {
   }> = [];
 
   const push = (row: Omit<(typeof rows)[number], "snapshotId" | "projectId" | "evidenceJson"> & { evidence?: unknown }) => {
+    const { evidence, ...metric } = row;
     rows.push({
       snapshotId,
       projectId: plan.projectId,
-      ...row,
-      evidenceJson: JSON.stringify(row.evidence ?? {})
+      ...metric,
+      evidenceJson: JSON.stringify(evidence ?? {})
     });
   };
 

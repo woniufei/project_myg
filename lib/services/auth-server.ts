@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { mapUser, type StoredUser } from "@/lib/repositories/workspace-mappers";
+import { sampleWorkspace } from "@/lib/sample-data";
 import type { User } from "@/lib/types";
 
 const COOKIE_NAME = "pm-active-user-id";
@@ -28,8 +29,19 @@ export async function getCurrentUserFromSession(): Promise<User | undefined> {
       include: { memberships: true },
       orderBy: { createdAt: "asc" }
     })) as StoredUser | null;
-    return fallback ? mapUser(fallback) : undefined;
+    if (fallback) {
+      return mapUser(fallback);
+    }
+
+    return resolveSampleUser(cookieUserId);
   } catch {
-    return undefined;
+    return resolveSampleUser(cookieUserId);
   }
+}
+
+function resolveSampleUser(userId?: string): User | undefined {
+  if (userId) {
+    return sampleWorkspace.users.find((user) => user.id === userId) ?? sampleWorkspace.users[0];
+  }
+  return sampleWorkspace.users[0];
 }

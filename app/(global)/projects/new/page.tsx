@@ -2,7 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { Surface } from "@/components/primer/Surface";
 import { ProjectCreateForm } from "@/components/projects/ProjectCreateForm";
-import { can } from "@/lib/rbac";
+import { listProjectTeamLeadCandidates } from "@/lib/services/project-workflow";
 import { getShellRequestContext } from "@/lib/services/shell-request-context";
 import type { ProjectModule } from "@/lib/types";
 
@@ -30,12 +30,13 @@ const DEFAULT_MODULES: ProjectModule[] = [
 
 export default async function NewProjectPage() {
   const { snapshot, currentUser } = await getShellRequestContext();
+  const teamLeadCandidates = await listProjectTeamLeadCandidates();
 
   if (!currentUser) {
     notFound();
   }
-  if (!can(currentUser.role, "manageProjects")) {
-    redirect("/projects");
+  if (currentUser.role !== "projectManager") {
+    redirect("/my/projects");
   }
 
   return (
@@ -44,7 +45,9 @@ export default async function NewProjectPage() {
       <header className="page-header" style={{ marginTop: 16, marginBottom: 16 }}>
         <div className="page-header__meta">
           <h1 className="page-title">新建项目</h1>
-          <p className="page-subtitle">可选父项目以建立项目层级，并选择需要启用的模块。</p>
+          <p className="page-subtitle">
+            项目经理创建项目时必须同步创建至少一个项目阶段，便于后续团队负责人挂载节点和任务。
+          </p>
         </div>
       </header>
       <Surface>
@@ -52,6 +55,7 @@ export default async function NewProjectPage() {
           parentCandidates={snapshot.projects}
           defaultModules={DEFAULT_MODULES}
           allModules={ALL_MODULES}
+          teamLeadCandidates={teamLeadCandidates}
           currentUserId={currentUser.id}
         />
       </Surface>

@@ -1,24 +1,91 @@
-import { PrismaClient } from "@prisma/client";
+import prismaClientPkg from "@prisma/client";
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
+const { PrismaClient } = prismaClientPkg;
 
 const adapter = new PrismaBetterSqlite3({
   url: process.env.DATABASE_URL ?? "file:./prisma/dev.db"
 });
 const prisma = new PrismaClient({ adapter });
+const PERSONAL_PROJECT_ID = "personProject";
 
 const people = [
-  { id: "p1", name: "产品负责人", role: "Product", capacity: 32, skills: ["产品定义", "用户故事", "验收口径"] },
-  { id: "p2", name: "前端开发", role: "Frontend", capacity: 36, skills: ["看板设计", "前端实现", "图表可视化"] },
-  { id: "p3", name: "后端开发", role: "Backend", capacity: 36, skills: ["接口设计", "数据建模", "Agent 编排"] },
-  { id: "p4", name: "测试与部署", role: "QA/Ops", capacity: 28, skills: ["测试设计", "部署运维", "健康检查"] }
+  { id: "p1", name: "产品负责人", role: "Product", capacity: 32, employeeNo: "YG0001", jobTitle: "项目经理", departmentCode: "D-PMO", departmentName: "项目管理办公室", externalId: "feishu-p1", skills: ["产品定义", "用户故事", "验收口径"] },
+  { id: "p2", name: "前端开发", role: "Frontend", capacity: 36, employeeNo: "YG0002", jobTitle: "前端工程师", departmentCode: "D-SW", departmentName: "域控软件交付组", externalId: "feishu-p2", skills: ["看板设计", "前端实现", "图表可视化"] },
+  { id: "p3", name: "后端开发", role: "Backend", capacity: 36, employeeNo: "YG0003", jobTitle: "软件交付负责人", departmentCode: "D-SW", departmentName: "域控软件交付组", externalId: "feishu-p3", skills: ["接口设计", "数据建模", "Agent 编排"] },
+  { id: "p4", name: "测试与部署", role: "QA/Ops", capacity: 28, employeeNo: "YG0004", jobTitle: "测试与部署工程师", departmentCode: "D-SW", departmentName: "域控软件交付组", externalId: "feishu-p4", skills: ["测试设计", "部署运维", "健康检查"] },
+  { id: "p5", name: "嵌入式开发", role: "Embedded", capacity: 32, employeeNo: "YG0005", jobTitle: "嵌入式软件工程师", departmentCode: "D-SW", departmentName: "域控软件交付组", externalId: "feishu-p5", skills: ["AUTOSAR", "诊断协议", "刷写验证"] },
+  { id: "p6", name: "团队负责人-cs", role: "Customer Success Lead", capacity: 32, employeeNo: "YG0006", jobTitle: "客户成功团队负责人", departmentCode: "D-CS", departmentName: "客户成功交付组", externalId: "feishu-p6", skills: ["客户交付", "阶段推进", "风险升级"] }
 ];
 
+const externalDepartments = [
+  {
+    id: "ed-pmo",
+    externalId: "od-pmo",
+    name: "项目管理办公室",
+    parentId: null,
+    code: "D-PMO",
+    leaderId: "feishu-p1",
+    leaderName: "产品负责人",
+    memberCount: 1
+  },
+  {
+    id: "ed-sw",
+    externalId: "od-sw",
+    name: "域控软件交付组",
+    parentId: null,
+    code: "D-SW",
+    leaderId: "feishu-p3",
+    leaderName: "后端开发",
+    memberCount: 4
+  },
+  {
+    id: "ed-cs",
+    externalId: "od-cs",
+    name: "客户成功交付组",
+    parentId: null,
+    code: "D-CS",
+    leaderId: "feishu-p6",
+    leaderName: "团队负责人-cs",
+    memberCount: 1
+  }
+];
+
+const externalPersons = people.map((person) => ({
+  id: `ep-${person.id}`,
+  externalId: person.externalId,
+  name: person.name,
+  email: `${person.employeeNo.toLowerCase()}@example.com`,
+  employeeNo: person.employeeNo,
+  jobTitle: person.jobTitle,
+  departmentCode: person.departmentCode,
+  departmentName: person.departmentName,
+  departmentId: person.departmentCode === "D-SW" ? "ed-sw" : person.departmentCode === "D-CS" ? "ed-cs" : "ed-pmo",
+  isLeader: person.id === "p1" || person.id === "p3" || person.id === "p6",
+  personId: person.id
+}));
+
 const projects = [
+  {
+    id: PERSONAL_PROJECT_ID,
+    identifier: "person-project",
+    name: "个人事项默认项目",
+    description: "系统内置的个人事项挂载项目，不在普通项目列表中展示。",
+    createdByUserId: "u-admin",
+    parentId: null,
+    status: "ACTIVE",
+    health: "LOW",
+    initialDifficulty: "LOW",
+    progress: 0,
+    startDate: null,
+    endDate: null,
+    enabledModules: ["overview", "work_packages"]
+  },
   {
     id: "proj-platform",
     identifier: "platform",
     name: "平台总览",
     description: "组合 AI 项目管理平台与其子项目的根项目，承载跨项目报表和成员管理。",
+    createdByUserId: "u-admin",
     parentId: null,
     status: "ACTIVE",
     health: "LOW",
@@ -33,6 +100,7 @@ const projects = [
     identifier: "ai-pm",
     name: "AI 项目管理平台",
     description: "通过对话、动态看板和 AI 管家完成项目任务管理、进度跟进与风险分析。",
+    createdByUserId: "u-pm",
     parentId: "proj-platform",
     status: "ACTIVE",
     health: "MEDIUM",
@@ -56,6 +124,7 @@ const projects = [
     identifier: "ai-pm-mobile",
     name: "移动端体验",
     description: "AI 项目管理平台的移动端体验子项目，复用平台核心数据。",
+    createdByUserId: "u-pm",
     parentId: "proj-ai-pm",
     status: "ON_HOLD",
     health: "LOW",
@@ -68,9 +137,40 @@ const projects = [
 ];
 
 const users = [
-  { id: "u-admin", name: "平台管理员", role: "ADMIN", personId: "p1", projectIds: projects.map((p) => p.id), leadProjectIds: projects.map((p) => p.id) },
-  { id: "u-pm", name: "项目经理", role: "PROJECT_MANAGER", personId: "p1", projectIds: ["proj-ai-pm", "proj-ai-pm-mobile"], leadProjectIds: ["proj-ai-pm", "proj-ai-pm-mobile"] },
-  { id: "u-member", name: "项目参与员", role: "PARTICIPANT", personId: "p2", projectIds: ["proj-ai-pm"], leadProjectIds: [] }
+  { id: "u-admin", name: "平台管理员", role: "ADMIN", multiRoles: ["ADMIN"], personId: "p1", projectIds: projects.map((p) => p.id), leadProjectIds: projects.map((p) => p.id) },
+  { id: "u-pm", name: "项目经理", role: "PROJECT_MANAGER", multiRoles: ["PROJECT_MANAGER"], personId: "p1", projectIds: ["proj-ai-pm", "proj-ai-pm-mobile"], leadProjectIds: ["proj-ai-pm", "proj-ai-pm-mobile"] },
+  { id: "u-teamlead", name: "团队负责人", role: "TEAM_LEAD", multiRoles: ["TEAM_LEAD"], personId: "p3", projectIds: ["proj-ai-pm"], leadProjectIds: [] },
+  { id: "u-teamlead-cs", name: "团队负责人-cs", role: "TEAM_LEAD", multiRoles: ["TEAM_LEAD"], personId: "p6", projectIds: [], leadProjectIds: [] },
+  { id: "u-member", name: "项目参与员", role: "PARTICIPANT", multiRoles: ["PARTICIPANT"], personId: "p2", projectIds: ["proj-ai-pm"], leadProjectIds: [] },
+  { id: "u-qa", name: "测试与部署", role: "PARTICIPANT", multiRoles: ["PARTICIPANT"], personId: "p4", projectIds: [], leadProjectIds: [] },
+  { id: "u-embedded", name: "嵌入式开发", role: "PARTICIPANT", multiRoles: ["PARTICIPANT"], personId: "p5", projectIds: [], leadProjectIds: [] }
+];
+
+const teams = [
+  {
+    id: "team-domain-control",
+    name: "域控软件交付组",
+    description: "负责域控软件任务拆解、成员分配与完成核对。",
+    leadId: "p3",
+    externalId: "od-sw",
+    syncedAt: "2026-05-15T02:00:00.000Z"
+  },
+  {
+    id: "team-customer-success",
+    name: "客户成功交付组",
+    description: "用于验证项目阶段负责人配置流程的客户交付团队。",
+    leadId: "p6",
+    externalId: "od-cs",
+    syncedAt: "2026-05-18T02:00:00.000Z"
+  }
+];
+
+const teamMemberships = [
+  { id: "tm-domain-lead", teamId: "team-domain-control", personId: "p3" },
+  { id: "tm-domain-frontend", teamId: "team-domain-control", personId: "p2" },
+  { id: "tm-domain-qa", teamId: "team-domain-control", personId: "p4" },
+  { id: "tm-domain-embedded", teamId: "team-domain-control", personId: "p5" },
+  { id: "tm-cs-lead", teamId: "team-customer-success", personId: "p6" }
 ];
 
 const workPackages = [
@@ -89,7 +189,10 @@ const workPackages = [
     lastProgressNote: "Agent OS 已交付。",
     dependencies: [],
     requiredSkills: ["产品定义"],
-    dueDate: "2026-04-26T00:00:00.000Z"
+    dueDate: "2026-04-26T00:00:00.000Z",
+    verificationStatus: "VERIFIED",
+    requiresVerification: true,
+    verifiedByUserId: "u-admin"
   },
   {
     id: 2,
@@ -107,7 +210,9 @@ const workPackages = [
     lastProgressNote: "对话拆解可生成草稿，等待接入服务端权限范围。",
     dependencies: [1],
     requiredSkills: ["接口设计", "Agent 编排"],
-    dueDate: "2026-05-05T00:00:00.000Z"
+    dueDate: "2026-05-05T00:00:00.000Z",
+    requiresVerification: true,
+    verificationStatus: "PENDING"
   },
   {
     id: 3,
@@ -202,7 +307,7 @@ const workPackages = [
   },
   {
     id: 8,
-    projectId: null,
+    projectId: PERSONAL_PROJECT_ID,
     createdByUserId: "u-member",
     origin: "SELF",
     type: "TASK",
@@ -394,7 +499,101 @@ const workPackages = [
     requiredSkills: ["验收口径"],
     startDate: "2026-06-30T00:00:00.000Z",
     dueDate: "2026-06-30T00:00:00.000Z"
+  },
+  {
+    id: 19,
+    projectId: "proj-ai-pm",
+    parentId: 2,
+    type: "TASK",
+    subject: "补充接口联调用例",
+    description: "团队负责人拆分给前端开发的成员子任务。",
+    assigneeId: "p2",
+    status: "inProgress",
+    priority: "P1",
+    estimateHours: 6,
+    percentComplete: 40,
+    lastProgressNote: "已完成联调用例草稿，等待后端接口稳定。",
+    dependencies: [2],
+    requiredSkills: ["前端实现", "测试设计"],
+    startDate: "2026-05-02T00:00:00.000Z",
+    dueDate: "2026-05-06T00:00:00.000Z",
+    requiresVerification: true,
+    verificationStatus: "SELF_REPORTED_DONE"
+  },
+  {
+    id: 20,
+    projectId: "proj-ai-pm",
+    parentId: 2,
+    type: "TASK",
+    subject: "整理服务端权限边界说明",
+    description: "团队负责人拆分给测试与部署的成员子任务。",
+    assigneeId: "p4",
+    status: "todo",
+    priority: "P1",
+    estimateHours: 5,
+    percentComplete: 10,
+    lastProgressNote: "已收集接口清单。",
+    dependencies: [2],
+    requiredSkills: ["测试设计", "权限设计"],
+    startDate: "2026-05-03T00:00:00.000Z",
+    dueDate: "2026-05-07T00:00:00.000Z",
+    requiresVerification: true,
+    verificationStatus: "REJECTED",
+    rejectedReason: "需补充团队负责人 API 范围和按钮权限说明。"
+  },
+  {
+    id: 21,
+    projectId: "proj-ai-pm",
+    parentId: 2,
+    type: "TASK",
+    subject: "模拟：参与员历史阻塞恢复后继续验证",
+    description: "用于验证项目参与员在工作项恢复为进行中后，即使保留历史阻塞和 delay 标签，也可以继续更新进度。",
+    assigneeId: "p2",
+    status: "inProgress",
+    priority: "P1",
+    estimateHours: 6,
+    percentComplete: 35,
+    lastProgressNote: "上游决策已通过，阻塞解除后继续推进联调验证。",
+    blockedReason: "等待上一级接口联调决策。",
+    blockedStartedAt: "2026-05-08T00:00:00.000Z",
+    blockedResolvedAt: "2026-05-15T00:00:00.000Z",
+    delayReason: "上游决策等待导致执行窗口延后。",
+    delayDays: 3,
+    delayStartedAt: "2026-05-10T00:00:00.000Z",
+    delayResolvedAt: "2026-05-15T00:00:00.000Z",
+    dependencies: [2],
+    requiredSkills: ["前端实现", "联调验证"],
+    startDate: "2026-05-07T00:00:00.000Z",
+    dueDate: "2026-05-10T00:00:00.000Z"
   }
+];
+
+const workPackageRequirements = [
+  { id: "wpr-1", workPackageId: 10, content: "平台总览页面已完成布局和主要卡片组件", sortOrder: 0 },
+  { id: "wpr-2", workPackageId: 10, content: "首屏启动流程打通，可正常进入项目", sortOrder: 1 },
+  { id: "wpr-3", workPackageId: 10, content: "平台总览核心指标数据源已接入", sortOrder: 2 },
+  { id: "wpr-4", workPackageId: 14, content: "Agent Tools 统一注册表完成 SDK 调用管道", sortOrder: 0 },
+  { id: "wpr-5", workPackageId: 14, content: "大屏看板完成 1920×1080 / 4K 适配和自动刷新", sortOrder: 1 },
+  { id: "wpr-6", workPackageId: 14, content: "关键路径甘特图完成按日期驱动的布局重构", sortOrder: 2 },
+  { id: "wpr-7", workPackageId: 1, content: "对话拆解 Agent 输出结构已沉淀为 schema", sortOrder: 0 },
+  { id: "wpr-8", workPackageId: 1, content: "部署模板 Dockerfile + compose + CI 可运行", sortOrder: 1 },
+  { id: "wpr-9", workPackageId: 1, content: "健康检查与回滚说明文档已完成", sortOrder: 2 },
+  { id: "wpr-10", workPackageId: 19, content: "联调用例覆盖正常、异常、权限拒绝三类路径", sortOrder: 0 },
+  { id: "wpr-11", workPackageId: 20, content: "权限边界说明覆盖按钮、API 与项目范围", sortOrder: 0 }
+];
+
+const workPackageAssignments = [
+  { id: "wpa-member-2-1", workPackageId: 2, personId: "p3", role: "主负责人", responsibility: "服务端拆解接口、权限边界和 Agent 编排", sortOrder: 0 },
+  { id: "wpa-member-2-2", workPackageId: 2, personId: "p2", role: "前端联调", responsibility: "对话入口、草稿预览和异常提示联调", sortOrder: 1 },
+  { id: "wpa-member-2-3", workPackageId: 2, personId: "p4", role: "验证支持", responsibility: "接口联调用例、权限拒绝和回归检查", sortOrder: 2 },
+  { id: "wpa-member-3-1", workPackageId: 3, personId: "p2", role: "主负责人", responsibility: "工作项表格、详情面板和 hover 体验", sortOrder: 0 },
+  { id: "wpa-member-3-2", workPackageId: 3, personId: "p3", role: "接口支持", responsibility: "列表查询、详情更新和成员分工 API 支撑", sortOrder: 1 },
+  { id: "wpa-member-4-1", workPackageId: 4, personId: "p4", role: "主负责人", responsibility: "Docker、CI 与 VPS 健康检查模板", sortOrder: 0 },
+  { id: "wpa-member-4-2", workPackageId: 4, personId: "p5", role: "产线侧验证", responsibility: "补充域控刷写和产线网络约束检查项", sortOrder: 1 },
+  { id: "wpa-member-19-1", workPackageId: 19, personId: "p2", role: "主负责人", responsibility: "补充前端联调用例并提交自测证据", sortOrder: 0 },
+  { id: "wpa-member-19-2", workPackageId: 19, personId: "p4", role: "测试复核", responsibility: "覆盖正常、异常、权限拒绝三类路径", sortOrder: 1 },
+  { id: "wpa-member-20-1", workPackageId: 20, personId: "p4", role: "主负责人", responsibility: "整理权限边界说明和验证记录", sortOrder: 0 },
+  { id: "wpa-member-20-2", workPackageId: 20, personId: "p3", role: "评审人", responsibility: "复核团队负责人 API 范围与数据库写入", sortOrder: 1 }
 ];
 
 const workPackageComments = [
@@ -515,6 +714,147 @@ const notificationRules = [
   }
 ];
 
+const notificationTemplates = [
+  {
+    id: "tmpl-comment",
+    activityType: "COMMENT",
+    name: "项目评论提醒",
+    titleTemplate: "{projectName} 有新的项目评论",
+    bodyTemplate: "{projectName} 的成员 {actorName} 围绕工作项「{workPackageSubject}」发表了评论：{content}"
+  },
+  {
+    id: "tmpl-decision",
+    activityType: "DECISION",
+    name: "待决策提醒",
+    titleTemplate: "{projectName} 发起待决策事项",
+    bodyTemplate: "{projectName} 的成员 {actorName} 发起了一项待决策信息，关联工作项「{workPackageSubject}」。请团队负责人或项目经理确认同意/拒绝后再推进状态流转：{content}"
+  },
+  {
+    id: "tmpl-blocker",
+    activityType: "BLOCKER",
+    name: "阻塞同步提醒",
+    titleTemplate: "{projectName} 出现阻塞信息",
+    bodyTemplate: "{projectName} 的成员 {actorName} 反馈工作项「{workPackageSubject}」存在阻塞：{content}"
+  },
+  {
+    id: "tmpl-evidence",
+    activityType: "EVIDENCE",
+    name: "证据留痕提醒",
+    titleTemplate: "{projectName} 新增交付证据",
+    bodyTemplate: "{projectName} 的成员 {actorName} 为工作项「{workPackageSubject}」补充了交付证据：{content}"
+  },
+  {
+    id: "tmpl-approval",
+    activityType: "APPROVAL",
+    name: "决策结果提醒",
+    titleTemplate: "{projectName} 决策已完成",
+    bodyTemplate: "{projectName} 的 {actorName} 已对工作项「{workPackageSubject}」完成决策：{content}"
+  },
+  {
+    id: "tmpl-progress",
+    activityType: "PROGRESS",
+    name: "进展提醒",
+    titleTemplate: "{projectName} 工作项进展更新",
+    bodyTemplate: "{projectName} 的成员 {actorName} 更新了工作项「{workPackageSubject}」的进展：{content}"
+  }
+];
+
+const notificationMessages = [
+  {
+    id: "notif-role-demo-pm-comment",
+    projectId: "proj-ai-pm",
+    workPackageId: 2,
+    senderPersonId: "p3",
+    recipientPersonId: "p1",
+    recipientUserId: "u-pm",
+    activityType: "COMMENT",
+    title: "AI 项目管理平台 有新的项目评论",
+    body: "AI 项目管理平台的成员 后端开发 围绕工作项「实现对话式任务拆解」发表了评论：服务端接口已完成联调，建议项目经理确认下一轮验收窗口。",
+    actionRequired: false,
+    decisionStatus: "NONE",
+    payloadJson: JSON.stringify({ channelType: "feishu", preview: "项目经理评论提醒卡片消息预览" }),
+    createdAt: "2026-05-15T07:10:00.000Z"
+  },
+  {
+    id: "notif-role-demo-lead-decision",
+    projectId: "proj-ai-pm",
+    workPackageId: 4,
+    senderPersonId: "p4",
+    recipientPersonId: "p3",
+    recipientUserId: "u-teamlead",
+    activityType: "DECISION",
+    title: "AI 项目管理平台 发起待决策事项",
+    body: "AI 项目管理平台的成员 测试与部署 发起了一项待决策信息，关联工作项「Docker 与 VPS 部署模板」。请团队负责人或项目经理确认同意/拒绝后再推进状态流转：是否先按模拟凭据完成 CI 验证，再等待正式 VPS 凭据接入？",
+    actionRequired: true,
+    decisionStatus: "PENDING",
+    payloadJson: JSON.stringify({ channelType: "feishu", preview: "团队负责人待决策卡片消息预览" }),
+    createdAt: "2026-05-15T07:11:00.000Z"
+  },
+  {
+    id: "notif-role-demo-member-evidence",
+    projectId: "proj-ai-pm",
+    workPackageId: 3,
+    senderPersonId: "p1",
+    recipientPersonId: "p2",
+    recipientUserId: "u-member",
+    activityType: "EVIDENCE",
+    title: "AI 项目管理平台 新增交付证据",
+    body: "AI 项目管理平台的成员 项目经理 为工作项「构建 OpenProject 风格工作项表格与详情面板」补充了交付证据：UI 复审截图和验收口径已归档，项目参与员可进入工作项查看。",
+    actionRequired: false,
+    decisionStatus: "NONE",
+    payloadJson: JSON.stringify({ channelType: "feishu", preview: "项目参与员证据提醒卡片消息预览" }),
+    createdAt: "2026-05-15T07:12:00.000Z"
+  },
+  {
+    id: "notif-demo-decision-pm",
+    projectId: "proj-ai-pm",
+    workPackageId: 3,
+    commentId: "wpc-2",
+    senderPersonId: "p2",
+    recipientPersonId: "p1",
+    recipientUserId: "u-pm",
+    activityType: "DECISION",
+    title: "AI 项目管理平台发起待决策事项",
+    body: "AI 项目管理平台的成员 前端开发 发起了一项待决策信息，关联工作项「构建 OpenProject 风格工作项表格与详情面板」。请团队负责人或项目经理确认同意/拒绝后再推进状态流转：采用 OpenProject 风格的 split-screen 工作项布局，左表右详情。",
+    actionRequired: true,
+    decisionStatus: "PENDING",
+    payloadJson: JSON.stringify({ channelType: "feishu", preview: "待决策卡片消息预览" }),
+    createdAt: "2026-04-28T14:00:00.000Z"
+  },
+  {
+    id: "notif-demo-decision-lead",
+    projectId: "proj-ai-pm",
+    workPackageId: 3,
+    commentId: "wpc-2",
+    senderPersonId: "p2",
+    recipientPersonId: "p3",
+    recipientUserId: "u-teamlead",
+    activityType: "DECISION",
+    title: "AI 项目管理平台发起待决策事项",
+    body: "AI 项目管理平台的成员 前端开发 发起了一项待决策信息，关联工作项「构建 OpenProject 风格工作项表格与详情面板」。请团队负责人或项目经理确认同意/拒绝后再推进状态流转：采用 OpenProject 风格的 split-screen 工作项布局，左表右详情。",
+    actionRequired: true,
+    decisionStatus: "PENDING",
+    payloadJson: JSON.stringify({ channelType: "feishu", preview: "待决策卡片消息预览" }),
+    createdAt: "2026-04-28T14:00:01.000Z"
+  },
+  {
+    id: "notif-demo-comment-member",
+    projectId: "proj-ai-pm",
+    workPackageId: 4,
+    commentId: "wpc-3",
+    senderPersonId: "p4",
+    recipientPersonId: "p2",
+    recipientUserId: "u-member",
+    activityType: "BLOCKER",
+    title: "AI 项目管理平台 出现阻塞信息",
+    body: "AI 项目管理平台的成员 测试与部署 反馈工作项「Docker 与 VPS 部署模板」存在阻塞：VPS SSH 与 GitHub Secrets 尚未配置，部署只能停留在模板验证。",
+    actionRequired: false,
+    decisionStatus: "NONE",
+    payloadJson: JSON.stringify({ channelType: "feishu", preview: "阻塞提醒卡片消息预览" }),
+    createdAt: "2026-04-28T15:00:00.000Z"
+  }
+];
+
 const stewardMessages = [
   {
     id: "sm1",
@@ -595,6 +935,8 @@ async function main() {
   await prisma.workPackageImpactEvent.deleteMany();
   await prisma.workPackageProgressEvent.deleteMany();
   await prisma.notificationDelivery.deleteMany();
+  await prisma.notificationMessage.deleteMany();
+  await prisma.notificationTemplate.deleteMany();
   await prisma.notificationRuleChannel.deleteMany();
   await prisma.notificationRule.deleteMany();
   await prisma.notificationChannel.deleteMany();
@@ -602,17 +944,39 @@ async function main() {
   await prisma.workPackageApproval.deleteMany();
   await prisma.workPackageComment.deleteMany();
   await prisma.stewardMessage.deleteMany();
+  await prisma.workPackageAssignment.deleteMany();
+  await prisma.workPackageRequirement.deleteMany();
   await prisma.workPackage.deleteMany();
   await prisma.projectMembership.deleteMany();
   await prisma.user.deleteMany();
   await prisma.project.deleteMany();
+  await prisma.externalPerson.deleteMany();
+  await prisma.externalDepartment.deleteMany();
+  await prisma.teamMembership.deleteMany();
+  await prisma.team.deleteMany();
   await prisma.person.deleteMany();
+  await prisma.externalSyncRun.deleteMany();
   await prisma.platformFeatureFlag.deleteMany();
+  await prisma.permissionOverride.deleteMany();
 
   await prisma.person.createMany({
     data: people.map((person) => ({
       ...person,
       skills: JSON.stringify(person.skills)
+    }))
+  });
+
+  await prisma.externalDepartment.createMany({
+    data: externalDepartments.map((department) => ({
+      ...department,
+      rawJson: JSON.stringify({ source: "seed", provider: "feishu" })
+    }))
+  });
+
+  await prisma.externalPerson.createMany({
+    data: externalPersons.map((person) => ({
+      ...person,
+      rawJson: JSON.stringify({ source: "seed", provider: "feishu" })
     }))
   });
 
@@ -623,6 +987,7 @@ async function main() {
         identifier: project.identifier,
         name: project.name,
         description: project.description,
+        createdByUserId: project.createdByUserId,
         parentId: project.parentId,
         status: project.status,
         health: project.health,
@@ -636,7 +1001,13 @@ async function main() {
   }
 
   await prisma.user.createMany({
-    data: users.map(({ id, name, role, personId }) => ({ id, name, role, personId }))
+    data: users.map(({ id, name, role, multiRoles, personId }) => ({
+      id,
+      name,
+      role,
+      roles: JSON.stringify(multiRoles),
+      personId
+    }))
   });
 
   for (const user of users) {
@@ -651,7 +1022,21 @@ async function main() {
     }
   }
 
-  for (const workPackage of workPackages) {
+  await prisma.team.createMany({
+    data: teams.map((team) => ({
+      ...team,
+      syncedAt: team.syncedAt ? new Date(team.syncedAt) : null
+    }))
+  });
+
+  await prisma.teamMembership.createMany({
+    data: teamMemberships
+  });
+
+  const rootWorkPackages = workPackages.filter((wp) => !wp.parentId);
+  const childWorkPackages = workPackages.filter((wp) => wp.parentId);
+
+  for (const workPackage of rootWorkPackages) {
     await prisma.workPackage.create({
       data: {
         id: workPackage.id,
@@ -669,12 +1054,62 @@ async function main() {
         estimateHours: workPackage.estimateHours,
         percentComplete: workPackage.percentComplete,
         lastProgressNote: workPackage.lastProgressNote,
+        blockedReason: workPackage.blockedReason,
+        blockedStartedAt: workPackage.blockedStartedAt ? new Date(workPackage.blockedStartedAt) : null,
+        blockedResolvedAt: workPackage.blockedResolvedAt ? new Date(workPackage.blockedResolvedAt) : null,
+        delayReason: workPackage.delayReason,
+        delayDays: workPackage.delayDays ?? 0,
+        delayStartedAt: workPackage.delayStartedAt ? new Date(workPackage.delayStartedAt) : null,
+        delayResolvedAt: workPackage.delayResolvedAt ? new Date(workPackage.delayResolvedAt) : null,
         dependencies: JSON.stringify(workPackage.dependencies),
         requiredSkills: JSON.stringify(workPackage.requiredSkills),
         isOnCriticalPath: workPackage.priority === "P0",
         riskLevel: workPackage.riskLevel,
         riskImpact: workPackage.riskImpact,
         riskMitigation: workPackage.riskMitigation,
+        verificationStatus: workPackage.verificationStatus,
+        requiresVerification: workPackage.requiresVerification ?? false,
+        verifiedByUserId: workPackage.verifiedByUserId,
+        rejectedReason: workPackage.rejectedReason,
+        dueDate: workPackage.dueDate ? new Date(workPackage.dueDate) : null
+      }
+    });
+  }
+
+  for (const workPackage of childWorkPackages) {
+    await prisma.workPackage.create({
+      data: {
+        id: workPackage.id,
+        projectId: workPackage.projectId,
+        type: workPackage.type,
+        subject: workPackage.subject,
+        description: workPackage.description,
+        status: workPackage.status,
+        priority: workPackage.priority,
+        origin: workPackage.origin ?? "MANAGER",
+        createdByUserId: workPackage.createdByUserId ?? resolveProjectCreatorUserId(workPackage.projectId),
+        assigneeId: workPackage.assigneeId,
+        parentId: workPackage.parentId,
+        startDate: workPackage.startDate ? new Date(workPackage.startDate) : null,
+        estimateHours: workPackage.estimateHours,
+        percentComplete: workPackage.percentComplete,
+        lastProgressNote: workPackage.lastProgressNote,
+        blockedReason: workPackage.blockedReason,
+        blockedStartedAt: workPackage.blockedStartedAt ? new Date(workPackage.blockedStartedAt) : null,
+        blockedResolvedAt: workPackage.blockedResolvedAt ? new Date(workPackage.blockedResolvedAt) : null,
+        delayReason: workPackage.delayReason,
+        delayDays: workPackage.delayDays ?? 0,
+        delayStartedAt: workPackage.delayStartedAt ? new Date(workPackage.delayStartedAt) : null,
+        delayResolvedAt: workPackage.delayResolvedAt ? new Date(workPackage.delayResolvedAt) : null,
+        dependencies: JSON.stringify(workPackage.dependencies),
+        requiredSkills: JSON.stringify(workPackage.requiredSkills),
+        isOnCriticalPath: workPackage.priority === "P0",
+        riskLevel: workPackage.riskLevel,
+        riskImpact: workPackage.riskImpact,
+        riskMitigation: workPackage.riskMitigation,
+        verificationStatus: workPackage.verificationStatus,
+        requiresVerification: workPackage.requiresVerification ?? false,
+        verifiedByUserId: workPackage.verifiedByUserId,
         dueDate: workPackage.dueDate ? new Date(workPackage.dueDate) : null
       }
     });
@@ -702,6 +1137,19 @@ async function main() {
       ...approval,
       createdAt: new Date(approval.createdAt)
     }))
+  });
+
+  await prisma.workPackageRequirement.createMany({
+    data: workPackageRequirements.map((req) => ({
+      id: req.id,
+      workPackageId: req.workPackageId,
+      content: req.content,
+      sortOrder: req.sortOrder
+    }))
+  });
+
+  await prisma.workPackageAssignment.createMany({
+    data: workPackageAssignments
   });
 
   await prisma.stewardMessage.createMany({
@@ -739,6 +1187,21 @@ async function main() {
       }
     });
   }
+
+  await prisma.notificationTemplate.createMany({
+    data: notificationTemplates.map((template) => ({
+      ...template,
+      cardTemplateJson: "{}",
+      enabled: true
+    }))
+  });
+
+  await prisma.notificationMessage.createMany({
+    data: notificationMessages.map((message) => ({
+      ...message,
+      createdAt: new Date(message.createdAt)
+    }))
+  });
 
   await prisma.agentBreakdownDraft.create({
     data: {

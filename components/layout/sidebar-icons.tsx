@@ -116,6 +116,18 @@ export function GanttIcon() {
   );
 }
 
+export function TeamIcon() {
+  return (
+    <svg {...baseProps}>
+      <circle cx="5.5" cy="5" r="2" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M2.5 12.5C2.5 10.8431 3.84315 9.5 5.5 9.5C7.15685 9.5 8.5 10.8431 8.5 12.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+      <circle cx="10.5" cy="5" r="2" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M7.5 12.5C7.5 10.8431 8.84315 9.5 10.5 9.5C12.1569 9.5 13.5 10.8431 13.5 12.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+      <path d="M5.5 9.5H10.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export function MembersIcon() {
   return (
     <svg {...baseProps}>

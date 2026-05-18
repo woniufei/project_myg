@@ -29,7 +29,7 @@ export async function PATCH(request: Request, context: RouteContext) {
       await recordProjectStateSnapshot({
         projectId: workPackage.projectId,
         user,
-        triggerType: progressTriggerFromBody(body, workPackage.progress)
+        triggerType: progressTriggerFromBody(body, workPackage.percentComplete)
       });
     }
 

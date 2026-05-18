@@ -17,15 +17,20 @@ import type {
   User,
   WorkPackage,
   WorkPackageApproval,
-  WorkPackageComment
+  WorkPackageComment,
+  NotificationMessage
 } from "@/lib/types";
 
 interface ProjectWorkPackagesViewProps {
   project: Project;
   workPackages: WorkPackage[];
+  allWorkPackages?: WorkPackage[];
+  projects?: Project[];
   comments: WorkPackageComment[];
   approvals: WorkPackageApproval[];
+  notificationMessages?: NotificationMessage[];
   people: Person[];
+  teamLeadCandidates?: Person[];
   currentUser?: User;
   initialSelectedId?: number;
 }
@@ -37,9 +42,13 @@ interface ProjectWorkPackagesViewProps {
 export function ProjectWorkPackagesView({
   project,
   workPackages,
+  allWorkPackages = workPackages,
+  projects = [project],
   comments,
   approvals,
+  notificationMessages = [],
   people,
+  teamLeadCandidates = [],
   currentUser,
   initialSelectedId
 }: ProjectWorkPackagesViewProps) {
@@ -64,6 +73,8 @@ export function ProjectWorkPackagesView({
     () => workPackages.find((wp) => wp.id === selectedId),
     [workPackages, selectedId]
   );
+  const canCreateProjectWorkPackage =
+    currentUser?.role === "projectManager" || currentUser?.role === "teamLead";
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -71,13 +82,15 @@ export function ProjectWorkPackagesView({
         title="筛选"
         description={`显示 ${filtered.length} / ${workPackages.length} 个工作项`}
         actions={
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => router.push(`/projects/${project.identifier}/work-packages/new`)}
-          >
-            <PlusIcon /> 新建工作项
-          </Button>
+          canCreateProjectWorkPackage ? (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => router.push(`/projects/${project.identifier}/work-packages/new`)}
+            >
+              <PlusIcon /> 新建工作项
+            </Button>
+          ) : null
         }
       >
         <WorkPackageFilters
@@ -103,8 +116,13 @@ export function ProjectWorkPackagesView({
               workPackage={selected}
               project={project}
               people={people}
+              teamLeadCandidates={teamLeadCandidates}
               comments={comments}
               approvals={approvals}
+              notificationMessages={notificationMessages.filter((message) => message.workPackageId === selected.id)}
+              childWorkPackages={workPackages.filter((wp) => wp.parentId === selected.id)}
+              allWorkPackages={allWorkPackages}
+              projects={projects}
               currentUser={currentUser}
               onClose={() => setSelectedId(undefined)}
             />

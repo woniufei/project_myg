@@ -37,7 +37,7 @@ export interface PlatformOverviewSnapshot {
   overdueWorkPackages: WorkPackage[];
 }
 
-const DONE_STATUSES = new Set(["done", "completed", "achieved", "closed"]);
+const DONE_STATUSES = new Set(["done"]);
 
 /**
  * Builds platform overview metrics from the same workspace snapshot used by UI.

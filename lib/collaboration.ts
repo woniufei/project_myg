@@ -212,7 +212,7 @@ function inferApprovalStatus(
     return "pending";
   }
 
-  if (approved.length > 0 || workPackage.status === "done" || workPackage.status === "completed") {
+  if (approved.length > 0 || workPackage.status === "done") {
     return "approved";
   }
 

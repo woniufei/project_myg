@@ -9,7 +9,7 @@ interface PageProps {
   params: Promise<{ identifier: string }>;
 }
 
-const TASK_COLUMNS = ["todo", "inProgress", "review", "done", "blocked"];
+const TASK_COLUMNS = ["todo", "review", "reviewFailed", "inProgress", "blocked", "done"];
 
 export default async function ProjectBoardsPage({ params }: PageProps) {
   const { identifier } = await params;

@@ -56,7 +56,7 @@ export function GlobalWorkPackagesView({
         people={people}
         hrefBuilder={(wp, project) =>
           project
-            ? `/projects/${project.identifier}/work-packages/${wp.id}`
+            ? `/projects/${project.identifier}/work-packages/${wp.id}?returnTo=/work-packages`
             : `/work-packages?focus=${wp.id}`
         }
       />

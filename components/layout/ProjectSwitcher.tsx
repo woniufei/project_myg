@@ -2,11 +2,13 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Project } from "@/lib/types";
+import type { Project, User } from "@/lib/types";
+import { filterProjectsForRole, userHasRole } from "@/lib/rbac";
 
 interface ProjectSwitcherProps {
   projects: Project[];
   currentProjectIdentifier?: string;
+  currentUser?: User;
 }
 
 interface ProjectNode {
@@ -18,13 +20,15 @@ interface ProjectNode {
  * Top-bar project selector with parent/child indentation. Mirrors
  * OpenProject 16.x's project picker behavior. Closes on outside click.
  */
-export function ProjectSwitcher({ projects, currentProjectIdentifier }: ProjectSwitcherProps) {
+export function ProjectSwitcher({ projects, currentProjectIdentifier, currentUser }: ProjectSwitcherProps) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
-  const orderedProjects = useMemo(() => buildHierarchy(projects), [projects]);
-  const current = projects.find((project) => project.identifier === currentProjectIdentifier);
+  const visibleProjects = useMemo(() => filterProjectsForRole(projects, currentUser), [projects, currentUser]);
+  const orderedProjects = useMemo(() => buildHierarchy(visibleProjects), [visibleProjects]);
+  const current = visibleProjects.find((project) => project.identifier === currentProjectIdentifier);
   const label = current?.name ?? "选择项目";
+  const showAllProjects = userHasRole(currentUser, "admin");
 
   useEffect(() => {
     if (!open) return;
@@ -86,25 +90,29 @@ export function ProjectSwitcher({ projects, currentProjectIdentifier }: ProjectS
             zIndex: 40
           }}
         >
-          <Link
-            role="menuitem"
-            href="/projects"
-            className="sidebar-link"
-            data-active={!current}
-            onClick={() => setOpen(false)}
-          >
-            <span className="sidebar-link__icon" aria-hidden="true">
-              <GridIcon />
-            </span>
-            <span>所有项目</span>
-          </Link>
-          <div className="divider" />
+          {showAllProjects ? (
+            <>
+              <Link
+                role="menuitem"
+                href="/projects"
+                className="sidebar-link"
+                data-active={!current}
+                onClick={() => setOpen(false)}
+              >
+                <span className="sidebar-link__icon" aria-hidden="true">
+                  <GridIcon />
+                </span>
+                <span>所有项目</span>
+              </Link>
+              <div className="divider" />
+            </>
+          ) : null}
           {orderedProjects.map(({ project, depth }) => (
             <Link
               key={project.id}
               role="menuitem"
               className="sidebar-link"
-              href={`/projects/${project.identifier}/overview`}
+              href={projectLandingHref(project, currentUser)}
               data-active={project.identifier === currentProjectIdentifier}
               onClick={() => setOpen(false)}
               style={{ paddingLeft: 12 + depth * 14 }}
@@ -126,10 +134,18 @@ export function ProjectSwitcher({ projects, currentProjectIdentifier }: ProjectS
   );
 }
 
+function projectLandingHref(project: Project, user?: User) {
+  if (userHasRole(user, "admin") || userHasRole(user, "projectManager")) {
+    return `/projects/${project.identifier}/overview`;
+  }
+  return `/projects/${project.identifier}/work-packages`;
+}
+
 function buildHierarchy(projects: Project[]): ProjectNode[] {
   const childrenByParent = new Map<string | undefined, Project[]>();
+  const projectIds = new Set(projects.map((project) => project.id));
   for (const project of projects) {
-    const parent = project.parentId;
+    const parent = project.parentId && projectIds.has(project.parentId) ? project.parentId : undefined;
     const list = childrenByParent.get(parent) ?? [];
     list.push(project);
     childrenByParent.set(parent, list);

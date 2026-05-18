@@ -1,5 +1,6 @@
 import { analyzeWithProvider } from "@/lib/agent/provider";
 import { prisma } from "@/lib/prisma";
+import { PERSONAL_PROJECT_ID } from "@/lib/project-constants";
 import {
   mapWorkPackage,
   toStoredRiskLevel,
@@ -88,13 +89,13 @@ export async function confirmAgentBreakdownDraft(
       const assigneeId = draft.projectId ? resolveAssigneeId(taskDraft, people) : user.personId;
       const wp = await tx.workPackage.create({
         data: {
-          projectId: draft.projectId,
+          projectId: draft.projectId ?? PERSONAL_PROJECT_ID,
           origin,
           createdByUserId: user.id,
           assigneeId,
           subject: taskDraft.title,
           description: taskDraft.description,
-          status: taskDraft.type === "milestone" ? "planned" : "todo",
+          status: "todo",
           priority: taskDraft.priority,
           type: toStoredWorkPackageType(taskDraft.type),
           estimateHours: 8,
@@ -110,13 +111,13 @@ export async function confirmAgentBreakdownDraft(
     for (const riskDraft of analysis.risks) {
       const wp = await tx.workPackage.create({
         data: {
-          projectId: draft.projectId,
+          projectId: draft.projectId ?? PERSONAL_PROJECT_ID,
           origin,
           createdByUserId: user.id,
           assigneeId: draft.projectId ? undefined : user.personId,
           subject: riskDraft.title,
           description: riskDraft.impact,
-          status: "open",
+          status: "todo",
           priority: "P1",
           type: "RISK",
           percentComplete: 0,

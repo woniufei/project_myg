@@ -4,6 +4,7 @@ import {
   createProject,
   type ProjectCreateInput
 } from "@/lib/services/project-workflow";
+import { recordProjectStateSnapshot } from "@/lib/services/big-screen-plan";
 import { loadWorkspaceSnapshot } from "@/lib/services/workspace";
 
 /**
@@ -27,9 +28,9 @@ export async function POST(request: Request) {
     const { user } = await getAuthContextFromRequest(request);
     const body = (await request.json().catch(() => ({}))) as Partial<ProjectCreateInput>;
 
-    if (!body.identifier || !body.name || !Array.isArray(body.enabledModules)) {
+    if (!body.identifier || !body.name || !Array.isArray(body.enabledModules) || !Array.isArray(body.phases)) {
       return NextResponse.json(
-        { error: "缺少必填字段：identifier、name、enabledModules。" },
+        { error: "缺少必填字段：identifier、name、enabledModules、phases。" },
         { status: 400 }
       );
     }
@@ -43,10 +44,17 @@ export async function POST(request: Request) {
         status: body.status,
         health: body.health,
         initialDifficulty: body.initialDifficulty,
-        enabledModules: body.enabledModules
+        enabledModules: body.enabledModules,
+        phases: body.phases
       },
       user
     );
+
+    await recordProjectStateSnapshot({
+      projectId: project.id,
+      user,
+      triggerType: "TASK_PROGRESS_UPDATED"
+    });
 
     return NextResponse.json({ project }, { status: 201 });
   } catch (error) {

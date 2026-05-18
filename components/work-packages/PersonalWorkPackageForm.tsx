@@ -6,6 +6,13 @@ import { Button } from "@/components/primer/Button";
 import { Input } from "@/components/primer/Input";
 import { Select } from "@/components/primer/Select";
 import { Textarea } from "@/components/primer/Textarea";
+import {
+  AttachmentPicker,
+  RequirementListEditor,
+  normalizeRequirementItems,
+  type AttachmentDraft
+} from "@/components/work-packages/WorkPackageFormFields";
+import { userHasRole } from "@/lib/rbac";
 import type { Person, Priority, Project, RiskLevel, User, WorkPackageType } from "@/lib/types";
 
 interface PersonalWorkPackageFormProps {
@@ -47,11 +54,22 @@ export function PersonalWorkPackageForm({
   const [riskLevel, setRiskLevel] = useState<RiskLevel>("Medium");
   const [riskImpact, setRiskImpact] = useState("");
   const [riskMitigation, setRiskMitigation] = useState("");
+  const [requirements, setRequirements] = useState([""]);
+  const [attachments, setAttachments] = useState<AttachmentDraft[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const isRequirementRequired =
+    userHasRole(currentUser, "admin") ||
+    userHasRole(currentUser, "projectManager") ||
+    userHasRole(currentUser, "teamLead");
 
   async function submit() {
     if (!currentUser || !subject.trim()) {
+      return;
+    }
+    const normalizedRequirements = normalizeRequirementItems(requirements);
+    if (isRequirementRequired && normalizedRequirements.length === 0) {
+      setError("当前角色创建工作项时至少需要填写 1 条需求项。");
       return;
     }
 
@@ -76,6 +94,8 @@ export function PersonalWorkPackageForm({
           estimateHours: estimateHours ? Number(estimateHours) : undefined,
           requiredSkills: parseCsv(requiredSkills),
           dependencies: parseNumberCsv(dependencies),
+          requirements: normalizedRequirements,
+          attachments,
           riskLevel: type === "risk" ? riskLevel : undefined,
           riskImpact: type === "risk" ? riskImpact : undefined,
           riskMitigation: type === "risk" ? riskMitigation : undefined
@@ -140,6 +160,14 @@ export function PersonalWorkPackageForm({
             onChange={(event) => setDescription(event.target.value)}
           />
         </Field>
+
+        <RequirementListEditor
+          value={requirements}
+          onChange={setRequirements}
+          required={isRequirementRequired}
+        />
+
+        <AttachmentPicker value={attachments} onChange={setAttachments} disabled={busy} />
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12 }}>
           <Field label="优先级">
@@ -227,7 +255,15 @@ export function PersonalWorkPackageForm({
           <Button variant="ghost" disabled={busy} onClick={() => router.push("/my/page")}>
             取消
           </Button>
-          <Button variant="primary" disabled={busy || !subject.trim()} onClick={submit}>
+          <Button
+            variant="primary"
+            disabled={
+              busy ||
+              !subject.trim() ||
+              (isRequirementRequired && normalizeRequirementItems(requirements).length === 0)
+            }
+            onClick={submit}
+          >
             {busy ? "创建中…" : "创建工作项"}
           </Button>
         </div>

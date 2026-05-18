@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { ProjectTree } from "@/components/projects/ProjectTree";
 import { Surface } from "@/components/primer/Surface";
-import { can } from "@/lib/rbac";
+import { canUser, filterProjectsForRole } from "@/lib/rbac";
 import { getShellRequestContext } from "@/lib/services/shell-request-context";
 
 export const dynamic = "force-dynamic";
@@ -10,17 +10,9 @@ export const dynamic = "force-dynamic";
 export default async function ProjectsPage() {
   const { snapshot, currentUser } = await getShellRequestContext();
 
-  const visibleProjects = currentUser
-    ? currentUser.role === "admin"
-      ? snapshot.projects
-      : snapshot.projects.filter(
-          (project) =>
-            currentUser.managedProjectIds.includes(project.id) ||
-            currentUser.participatingProjectIds.includes(project.id)
-        )
-    : snapshot.projects;
+  const visibleProjects = filterProjectsForRole(snapshot.projects, currentUser);
 
-  const canManage = currentUser ? can(currentUser.role, "manageProjects") : false;
+  const canManage = canUser(currentUser, "manageProjects");
 
   return (
     <>

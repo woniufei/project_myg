@@ -1,4 +1,5 @@
 import { calculateCriticalPathIds } from "@/lib/intelligence/critical-path";
+import { canAccessProject, resolveUserFromSnapshot } from "@/lib/services/auth-context";
 import type { Person, Project, User, WorkPackage, WorkspaceSnapshot } from "@/lib/types";
 
 export interface BigScreenViewModel {
@@ -62,7 +63,8 @@ export function buildBigScreenViewModel(
   user?: User,
   now = new Date()
 ): BigScreenViewModel {
-  const project = resolveVisibleProject(snapshot.projects, projectId, user);
+  const scopedUser = user ? resolveUserFromSnapshot(snapshot, user) : undefined;
+  const project = resolveVisibleProject(snapshot.projects, projectId, scopedUser);
   const people = new Map(snapshot.people.map((person) => [person.id, person]));
   const items = snapshot.workPackages.filter((wp) => wp.projectId === project.id);
   const criticalPathIds = calculateCriticalPathIds(items);
@@ -121,7 +123,7 @@ function resolveVisibleProject(projects: Project[], projectId: string, user?: Us
     throw new Error("项目不存在或当前用户不可见。");
   }
 
-  if (user && user.role !== "admin" && !user.participatingProjectIds.includes(project.id)) {
+  if (user && !canAccessProject(user, project.id)) {
     throw new Error("当前用户无权查看该项目大屏。");
   }
 
